@@ -1,0 +1,336 @@
+---
+title: "A Brief Analysis of Speed Dating"
+author: 'Group 003: Tim Brown, Hannah Striebel, Derien Weatherspoon'
+date: "22 April 2021"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    number_sections: no
+    df_print: paged
+  pdf_document:
+    toc: no
+    toc_depth: '2'
+---
+
+<style type="text/css">
+/* Title */
+h1.title {
+  color: #4C6A92;
+  font-size:40px;
+  font-weight: bold;
+}
+/* Level 1 header */
+h1 {
+  color: #4C6A92;
+  font-weight: bold;
+}
+/* Level 2 header */
+h2 {
+  color: #AD5D5D;
+  font-weight: bold;
+}
+
+    
+</style>
+
+```{r setup, include=FALSE}
+# global chunk options
+knitr::opts_chunk$set(echo = FALSE,
+                      error = TRUE,
+                      message = FALSE, 
+                      warning = FALSE,
+                      comment = NA,
+                      fig.width=6, 
+                      fig.height=5)
+library(tidyverse)
+require(reshape)
+library(broom)
+library(statsr)
+library(gridExtra)
+load("SpeedDating.rda")
+```
+
+
+# Introduction
+
+Over the course of this project, we hope to gain insight into how people view potential significant others through the use of a speed dating dataset collected from students at Columbia University. This dataset consists of 276 “dates,” where a male and female pair had a four minute speed date and then filled out a form rating various attributes about their date from 1 to 10. The dataset also includes information about each partner, such as their age, race, and gender.
+ 
+```{r readData}
+glimpse(SpeedDating)
+```
+ 
+By leveraging the information in this dataset, we hope to find answers to a number of questions pertaining to dating. Do people prefer to date inside or outside their own ethnicity? Are males or females more likely to want a second date? Do females tend to rate males higher than males rate females? In what categories? Which features (attractiveness, sincerity, intelligence, etc) are most predictive of wanting a second date? Does this differ by gender? Age? Race?
+ 
+By answering these questions, we hope to gain quantitative insight and understanding into the complex human experience of dating.
+
+
+
+# Methods
+ 
+In order to analyze gender alongside ethnicity, the dataset will be filtered by gender and grouped by ethnicity. Analysis can then be done by plotting the data on a bar chart to observe any differences. Analysis of whether or not men or women were more likely to want a second date can be made by comparing the percentage distributions on a singular pie chart. Furthermore, the estimation for a chance at another date men and women gave each other can be found by plotting the ratings each gender gave their date on two different bar plots.
+ 
+To analyze the potential differences between the genders, very simple measures can be taken. Each factor is already separated by gender so the comparison for any individual factor, such as Fun or Sincerity, can be made by directly comparing the distribution of numerical ratings on a histogram, as well as comparing the averages of those distributions. To visualize some of the surface-level disparities directly related to race, filtering can be used to sort each group on whether or not the race of their partner matched their own race.
+ 
+To determine which features are most predictive of wanting a second date, the ratings of features will be plotted, separated by whether or not the individual wanted a second date. If the distribution of ratings for a given feature for both “yes” and “no” are similar, then that feature is not predictive of wanting a second date. However, if the distribution of ratings for “yes” is significantly higher or lower than that of “no”, this indicates that this feature is predictive of wanting a second date. Multiple Linear Regression can also be used to attempt to determine which variables are most predictive.
+
+
+
+# Results
+
+Men were more likely to want another date after the first date more than women were. The difference in likeliness was minute, showing a modest difference of 7% between the two. Men were also more likely to estimate that their date would be interested in a second date, with their ratings clustered around the top. On the other hand, women’s estimations were clustered around the middle. When looking at the results of ethnicity with gender, there were not any great disparities to be found from it. Men and women both went on dates with their own ethnicity and from outside their ethnicity at about an equal amount. No gender or ethnicity had a tendency to date specifically only one ethnicity, however, ethnicity to play a role in influencing for some men and women. For instance, Asian men and women are more likely to date within their own ethnicity. 
+
+```{r Second Date}
+df2 <- data.frame(
+  group = c("Yes(M)","No(M)", "Yes(W)", "No(W)"),
+  value = c(52.89855, 47.10145, 46.01449, 53.98551)
+)
+ggplot(df2, aes(x=group, y=value)) +
+  geom_segment( aes(x=group, xend=group, y=0, yend=value), color="grey") +
+  geom_point( color="darkgreen", size=4, alpha=0.6) +
+  labs(x = "Men and Women", y = "Percentages" ,title = "Percentages of Men and Women who wanted/didn't want a second date") +
+  theme_light() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank()
+  ) 
+```
+
+```{r Ethnicity Data}
+options(dplyr.summarise.inform = FALSE)
+decm <- SpeedDating %>%
+  filter(DecisionM == 1) %>%
+   group_by(RaceM, RaceF) %>%
+  summarize(count = n())
+ 
+decf <- SpeedDating %>%
+  filter(DecisionF == 1) %>%
+   group_by(RaceF, RaceM) %>%
+  summarize(count = n())
+ 
+x.decm <- decm %>%
+  mutate(Decision = "Males")
+ 
+x.decf <- decf %>%
+  mutate(Decision = "Females")
+ 
+preference <- rbind(x.decm, x.decf)
+
+```
+
+```{r Ethnicity Plots}
+RaceMPlot<- ggplot(preference, aes(x = RaceM, y = count)) +
+  geom_bar(
+    aes(colour = as.factor(Decision)),
+    stat = "identity", pos = "dodge",
+    width = 0.7
+    ) +
+  labs(x = "Males", y = "Count" ,title = "Ethnic Dating for Men",
+       color="Decision") +
+  scale_color_manual(values = c("#0073C2FF", "#EFC000FF"))+ 
+  scale_fill_manual(values = c("#0073C2FF", "#EFC000FF"))
+
+
+RaceFPlot <- ggplot(preference, aes(x = RaceF, y = count)) +
+  geom_bar(
+    aes(colour = as.factor(Decision)),
+    stat = "identity", pos = "dodge",
+    width = 0.7
+    ) +
+  labs(x = "Females", y = "Count" ,title = "Ethnic Dating for Women",
+       color="Decision")+
+  scale_color_manual(values = c("#0073C2FF", "#EFC000FF"))+
+  scale_fill_manual(values = c("#0073C2FF", "#EFC000FF")) 
+
+RaceMPlot
+RaceFPlot
+``` 
+
+The distribution of ethnicity dating decisions are for the most part, evenly spread out throughout the sample of men and women.
+ 
+ 
+ 
+Most category ratings displayed relative parity between the two sexes, though some distinctions arose upon further analysis. Men, on average, rated women’s Shared Interests higher than women rated men’s. In both the Sincerity and Fun categories, women also rated men on a more even distribution than their male counterparts who clustered their ratings more densely around 6,7 and 8; though this was very subtle. When race became a factor and the two sexes were separated into two groups for analysis, Same Race and Different Race. The distribution for ratings given by women nearly didn’t change at all. However, there was a subtle drop in attractiveness ratings given by men when their partner was not of the same race as they were.
+
+```{r Male-Race}
+Race1 <- SpeedDating %>% filter(RaceM != RaceF)
+Race2 <- SpeedDating %>% filter(RaceM == RaceF)
+a <- Race1 %>% ggplot(aes(x = AttractiveM))+geom_histogram()+labs(title = "Male Attraction Different Race",x= "Rating 1-10" )
+b <- Race2 %>% ggplot(aes(x = AttractiveM))+geom_histogram()+labs(title = "Male Attraction Same Race",x = "Rating 1-10")
+grid.arrange(a,b, ncol=2)
+```
+
+Though given the sample size, this may be due to a few outliers as it is a subtle shift in the distribution yet the means are similar.
+ 
+ 
+Which features are most predictive of wanting a second date? Does this differ by gender? Age? Race?
+
+As you can see from the box-plots below, the feature for which the “Yes” and “No” distribution are most dissimilar, and thus most predictive of wanting a second date is `Attractive`. In addition, `Fun` and `Shared Interests` also show a gap between “Yes” and “No.” 
+
+
+```{r formatData}
+female <- SpeedDating %>% 
+  select(DecisionF, AgeF, RaceF, AttractiveF, SincereF, IntelligentF, FunF,
+         AmbitiousF, SharedInterestsF) %>% 
+  mutate(Gender="F")
+ 
+colnames(female) <- c("Decision", "Age", "Race", "Attractive", "Sincere",
+                      "Intelligent", "Fun", "Ambitious", "SharedInterests",
+                      "Gender")
+ 
+male <- SpeedDating %>% 
+  select(DecisionM, AgeM, RaceM, AttractiveM, SincereM, IntelligentM, FunM,
+         AmbitiousM, SharedInterestsM) %>% 
+  mutate(Gender="M")
+ 
+colnames(male) <- c("Decision", "Age", "Race", "Attractive", "Sincere",
+                      "Intelligent", "Fun", "Ambitious", "SharedInterests",
+                      "Gender")
+ 
+# https://clayford.github.io/dwir/dwr_05_combine_merge_rehsape_data.html
+SpeedDating2 <- rbind(female, male) 
+SpeedDating2 <- na.omit(SpeedDating2)
+```
+```{r featureRatingsPlot}
+# https://stackoverflow.com/questions/14604439/plot-multiple-boxplot-in-one-graph
+ 
+all.by.feature <- SpeedDating2 %>%
+  select(Decision, Attractive, Sincere, Intelligent, Fun, Ambitious, SharedInterests) %>%
+  melt(id.var="Decision")
+ 
+ggplot(all.by.feature, mapping=aes(x=variable, y=value)) +
+  geom_boxplot(aes(fill=as.factor(Decision))) +
+  labs(x="Personality Trait", y="Rating", title="Rating of Partner",
+       fill="2nd date?") +
+  scale_fill_discrete(labels=c("No", "Yes"))
+```
+ 
+
+ 
+```{r genderPlots, eval=FALSE}
+ 
+M.by.feature <- SpeedDating2 %>%
+  filter(Gender == "M") %>% 
+  select(Decision, Attractive, Sincere, Intelligent, Fun, Ambitious, SharedInterests) %>%
+  melt(id.var="Decision")
+ 
+ggplot(M.by.feature, mapping=aes(x=variable, y=value)) +
+  geom_boxplot(aes(fill=as.factor(Decision))) +
+  labs(x="Personality Trait", y="Rating", title="Male's Rating of Female",
+       fill="Male wants second date?") +
+  scale_fill_discrete(labels=c("No", "Yes"))
+ 
+F.by.feature <- SpeedDating2 %>%
+  select(Decision, Attractive, Sincere, Intelligent, Fun, Ambitious, SharedInterests) %>%
+  melt(id.var="Decision")
+ 
+ggplot(F.by.feature, mapping=aes(x=variable, y=value)) +
+  geom_boxplot(aes(fill=as.factor(Decision))) +
+  labs(x="Personality Trait", y="Rating", title="Female's Rating of Male",
+       fill="Female wants second date?") +
+  scale_fill_discrete(labels=c("No", "Yes"))
+```
+ 
+When the dataset is divided by gender, the distribution of ratings is quite similar to the overall distribution.
+ 
+```{r racePlots, eval=FALSE}
+ 
+for(race in unique(SpeedDating2$Race)){
+  if (race != ""){
+    race.by.feature <- SpeedDating2 %>%
+      filter(Race == race) %>% 
+      select(Decision, Attractive, Sincere, Intelligent, Fun, Ambitious, SharedInterests) %>%
+      melt(id.var="Decision")
+    
+    print(paste(c("Race:", race), collapse=" "))
+    print(paste(c("Sample Size:", length(race.by.feature$Decision)), collapse=" "))
+ 
+    print(ggplot(race.by.feature, mapping=aes(x=variable, y=value)) +
+      geom_boxplot(aes(fill=as.factor(Decision))) +
+      labs(x="Personality Trait", y="Rating", title=race,
+           fill="Wants second date?") +
+      scale_fill_discrete(labels=c("No", "Yes")))
+  }
+}
+```
+ 
+When considering race, Caucasian ratings match the overall ratings, most likely because it is the most represented group (1854 samples out of 3276). For Asians, the most predictive feature is also `Attractive` followed by `Fun` and `Shared Interests`, but with the interesting caveat that the overall ratings in all categories are lower. For Blacks, `Shared Interests` seems to be most predictive, with `Attractive` in second. For Latinos, there’s a pretty big split between ‘yes’ and ‘no’ for most of the features, with `Attractive`, `Fun`, and `Intelligent` being the most predictive. 
+ 
+```{r agePlots, eval=FALSE}
+ 
+age.splits <- c(18, 25, 30, 56)
+ 
+for(i in 1:(length(age.splits)-1)){
+  age.by.feature <- SpeedDating2 %>%
+    filter(Age >= age.splits[i] & Age < age.splits[i+1]) %>%
+    select(Decision, Attractive, Sincere, Intelligent, Fun, Ambitious, SharedInterests) %>%
+    melt(id.var="Decision")
+  
+  print(paste(c("Age range:", age.splits[i], "to", age.splits[i+1]-1), collapse=" "))
+  print(paste(c("Sample Size:", length(age.by.feature$Decision)), collapse=" "))
+  
+  print(ggplot(age.by.feature, mapping=aes(x=variable, y=value)) +
+    geom_boxplot(aes(fill=as.factor(Decision))) +
+    labs(x="Personality Trait", y="Rating",
+         title= paste(c("Age range:", age.splits[i], "to", age.splits[i+1]-1), collapse=" "),
+         fill="Wants second date?") +
+    scale_fill_discrete(labels=c("No", "Yes")))
+}
+```
+ 
+The most interesting results when answering this question was the distinction between age groups. Ages 18 to 24 still value `Attractive` and `Shared Interests`, but this is the only category where a feature, `Ambitious`, is rated higher for ‘no’ than for ‘yes’. This indicates that young adults see being ambitious as a turn off. The age range of 25 to 30 matches the overall distribution. For adults aged 30 to 55 (the max age in the study), as always, `Attractive` and `Shared Interests` show the largest differences, and interestingly enough, `Ambition` also appears to be a predictor.
+ 
+By creating a linear model using all the features and then deriving the most parsimonious model, we can analytically determine which features are most predictive. 
+ 
+```{r linregAll}
+all.full.model <- lm(Decision ~ Attractive + Sincere + Intelligent + Fun +
+                       Ambitious + SharedInterests, data = SpeedDating2)
+ 
+all.selected.model <- step(object=all.full.model, direction="backward", trace=FALSE)
+ 
+all.selected.model %>% tidy()
+all.selected.model %>% glance() %>% select(r.squared, adj.r.squared)
+```
+
+```{r AttractiveVSSharedInterests, eval=FALSE}
+ggplot(SpeedDating2, aes(Attractive, SharedInterests)) +
+  geom_point(aes(color=factor(Decision))) +
+  labs(x="Attractive", y="SharedInterests", 
+       title= "Attractive vs Shared Interests", color="Wants second date?") +
+  scale_color_discrete(labels=c("No", "Yes"))
+```
+
+The results from the linear model align with what we previously discovered from the box plots - `Attractive` and `Shared Interests` are the most predictive features of wanting a second date. However, it is worth noting that this only results in an r-squared value of about .25, which means that only a quarter of the variation in the data is accounted for by our linear model. This is most likely due to the fact that each person in the study has individual tastes, and that even though `Attractive` and `Shared Interests` are the most predictive *on average*, some people may value other traits more.
+ 
+# Conclusion
+
+Overall, we were able to gain insights into a number of different questions surrounding the complexities of dating. We found that both men and women rate each other similarly except in a few select categories. Men also seem to perceive their own race as more attractive. Using our analysis, we learned that more men in general would like to go on dates, more than just a singular time. Although race was shown to not be a huge factor in influencing second dates, it still had some influence. And finally, `Attractive`, `Shared Interests`, and `Fun` are the most predictive features of wanting a second date.
+ 
+The dataset is from Columbia University, which is a reliable source. The dataset is valid for evaluating interpolated results, but may not extrapolate well. In addition, From the description of the data, the only participants were college students. This could bias our findings and potentially render them inaccurate when applied to the general populace. This study also focusses solely on heterosexual speed dates and further narrows the group that the findings could shed light on. Due to the study focusing on speed dating, which are dates around 4-5 minutes, the data could show bias against people who need more than that time given to give ratings on someone. Furthermore, due to the relatively small sample size of the data, outliers are bound to have a much more pronounced effect on the overall findings in certain test cases. While the methods used throughout the analysis are statistically sound, there was not a concerted effort to clean the data/cull obvious outliers from the dataset before analysis. 
+ 
+In the future, we could improve our analysis through a number of means. Instead of merely graphing, we could perform hypothesis tests to see if differences in groups (gender, for example) were statistically significant from one another. Further analysis could be done using predictions instead of simply visualizing the data and interpreting it.
+In addition, there are a whole host of questions that could be further explored with this data. Given the time that has elapsed since the dataset was collected, we could also delve into the potential shifts in these categories by examining current college students alongside the general population of today. With this more recent repetition we would be able to observe and document any potential changes in preferences, priorities, desirable traits, as well as open the study up to be both more inclusive and comprehensive. 
+
+# Sources
+
+Gelman, A. and Hill, J., *Data analysis using regression and multi-level/hierarchical models*, Cambridge University Press: New York, 2007.
+
+Müller, K., & Wickham, H. (n.d.). *Group by one or more variables* — group_by. Https://Dplyr.Tidyverse.Org. Retrieved April 22, 2021, from https://dplyr.tidyverse.org/reference/group_by.html
+
+Wickham, H., Chang, W., Henry, L., Pedersen, T., Takahashi, K., Wilke, C., … Dunnington, D. (n.d.). *Function reference*. ggplot2 Reference. https://ggplot2.tidyverse.org/reference/.
+
+
+
+
+
+
+
+
+
+
+
+
+
+

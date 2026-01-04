@@ -1,0 +1,336 @@
+---
+title: "SS21 STT 180 Homework 3"
+author: "Derien W"
+date: "April 1-17, 2021"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    toc: yes
+    number_sections: no
+    toc_float: yes
+    toc_depth: 4
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      message = FALSE, 
+                      warning = FALSE,
+                      comment = NA)
+```
+
+**Setting up:**
+
+Load `tidyverse` (which includes `dplyr`, `ggplot2`, `tidyr`, and other packages), `knitr` and `broom` packages.
+
+```{r echo=TRUE}
+library(tidyverse)
+library(infer)
+library(knitr)
+library(broom)
+library(na.tools)
+```
+
+
+This Homework is due on **Saturday, April 17, 2021 on or before 11 pm.**
+
+# Section 1
+
+For the first section of this homework will use the`Breast_Cancer.csv` file. There are 10 quantitative variables, and a binary dependent variable, indicating the presence or absence of breast cancer. The predictors are anthropometric data and parameters which can be gathered in routine blood analysis. 
+
+Read in the data and convert the data frame to a tibble.
+
+```{r reading in data, echo=TRUE}
+birth_data <- read.csv("Breast_Cancer.csv", header = TRUE)
+birth_data <- as_tibble(birth_data)
+```
+
+A glimpse of the data:
+
+```{r glimpse of data, echo=TRUE }
+glimpse(birth_data)
+```
+
+The variables in the data set are:
+
+Variable | Description
+---------|------------
+`Age` | age in years.
+`BMI` | the body mass index.
+`Glucose (mg/dL)` | the fasting glucose level (mg/dL).
+`Insulin (µg/mL)` | amount of insulin.
+`HOMA` | Homeostasis Model Assessment.
+`Leptin (ng/mL) ` | type of adipocytokines    
+`Adiponectin (µg/mL) ` | a protein hormone. 
+`Resistin (ng/mL)` | cysteine-rich peptide hormone.
+`MCP-1(pg/dL)` | Monocyte chemoattractant protein-1 (MCP-1)
+`Classification` | 1= Healty control, 2= Breast Cancer Patients.
+
+
+Make sure to familiarize yourself with the data by reading about the variables on the website. Note that the data comes the study https://bmccancer.biomedcentral.com/articles/10.1186/s12885-017-3877-1. 
+
+According to CDC, (https://www.cdc.gov/healthyweight/assessing/bmi/adult_bmi/index.html)  BMI between 18-25 is considered normal. 
+
+Let us investigate using the Breast_Cancer data, whether breast cancer patients have normal BMI on average (considering 25 as normal)?
+
+### Question 1
+
+Calculate sample statistic. Is it a continuous or categorical sample statistic?
+
+```{r AverageBMI for both groups, echo=TRUE}
+summary(birth_data$BMI[birth_data$Classification == 1])
+summary(birth_data$BMI[birth_data$Classification == 2])
+#This is a continuous sample statistic since BMI is a range of values.
+```
+
+.
+ 
+### Question 2
+
+a. Set up and test the hypotheses to determine whether breast cancer patients have higher than normal BMI (25) or not (follow the hypothesis process stepwise as you have done in your Module 5 group assignments) .
+
+- State the null and alternative hypotheses.
+# Null Hypothesis: mu = 25 
+#Alternative Hypothesis: mu =/= 25
+
+- Generate the null distribution and plot the distribution.
+
+
+```{r null_dist, echo=TRUE}
+null.dist <- birth_data %>%
+   filter(Classification == 2) %>%
+  specify(response = BMI) %>%
+  hypothesise(null = "point", mu = 25) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "mean") 
+
+ggplot(null.dist, aes(stat)) + geom_histogram() 
+```
+
+b. Determine the p-value and compare it to $\alpha =0.05$
+
+```{r p_value, echo=TRUE}
+null.dist %>%
+  filter(stat <=25) %>%
+  summarise(p_value=n()/nrow(null.dist))
+```
+
+c. Conclude and interpret the results.
+#Given the p-value of 0.5057, this is greater than the significance level of alpha. Thus, we fail to reject the null hypothesis. We have enough evidence to suggest that a BMI of 25 is normal.
+### Question 3
+
+a. Estimate 95% confidence interval for average BMI of breast cancer patients.
+
+
+```{r 95%CI, echo=TRUE}
+# bootstrap samples
+boot.means <- birth_data %>%
+   filter(Classification == 2) %>%
+  specify(response = BMI) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "mean")
+boot.means %>%
+  summarise(lower95 = quantile(stat, probs = .025),
+            upper95 = quantile(stat, probs = .975))
+# cutoff bounds
+# save as vector
+```
+
+b. Interpret the 95% confidence interval.
+#We are 95% confident that the interval (25.8,28.1) captures the average BMI in the population
+### Question 4
+
+Is having a higher than normal BMI, an indicator of increase risk of breast cancer given your results in 2 and 3? (Hint: consider the BMI of people don’t have breast cancer (healthy control). Run the hypothesis test and estimate the 95% confidence interval to check the your conclusion). Justify your answer in 3-4 sentences.
+
+```{r healthy people, echo=TRUE}
+null.dist1 <- birth_data %>%
+  filter(Classification == 1) %>%
+  specify(response = BMI) %>%
+  hypothesise(null = "point", mu = 25) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "mean") 
+
+null.dist1 %>%
+  filter(stat !=25) %>%
+  summarise(p_value=n()/nrow(null.dist))
+
+boot.means1 <- birth_data %>%
+   filter(Classification == 1) %>%
+  specify(response = BMI) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "mean")
+boot.means1 %>%
+  summarise(lower95 = quantile(stat, probs = .025),
+            upper95 = quantile(stat, probs = .975))
+#Given the p-value of 1, this is greater than the significance level of alpha. Thus, we fail to reject the null hypothesis. That suggests that there are no differences between the groups.  Given the confidence interval, #We are 95% confident that the interval (26.8,29.7) captures the average BMI in the population of healthy people.
+
+```
+
+
+# Section 2
+
+For this section of this homework will use the`abalone.csv` file from UCI repository (https://archive.ics.uci.edu/ml/datasets/Abalone).
+
+The number of rings in the shell of a abalone is indicative of its age. This is done by cutting the shell through the cone, staining it, and counting the number of rings through a microscope -- a boring and time-consuming task. In this section, we will analyze the relationship between age (measured by the number of rings) and a few different variables present in the data.
+
+
+
+```{r read data, echo=TRUE}
+ab <- read.csv("abalone.csv")
+glimpse(ab)
+
+```
+
+### Question 1
+
+We will start by analyzing a simple bivariate relationship between age and height. 
+
+Plot a scatter plot to get an idea about the relationship between height and age. Comment (1-3 sentences) on the plot.
+
+```{r scatter plot, echo=TRUE}
+ggplot(ab, aes(x = Height, y =Rings)) + geom_jitter(position = position_jitter(width = 0.2)) + 
+    geom_point()
+# The scatter shows a trend of as the age reaches in between 5-15 range, the height begins to round out/stagnate in between 0.1 through 0.4.
+```
+
+### Question 2
+
+Modify the plot in Question 1 to reflect the effect of the variable `Sex` in the plot.
+
+```{r scatter plot_sex, echo=TRUE}
+ggplot(ab, aes(x = Height, y =Rings, colour =Sex)) + geom_jitter(position = position_jitter(width = 0.2)) + 
+    geom_point()
+```
+
+### Question 3
+
+One of the goal is to study if there is significant difference in the age of the abalone based on shell weight, height, and diameter?  Fit a multiple regression model to test the effect of the three variables on the age of the abalone.Interpret the model fit.
+
+```{r MLR, echo=TRUE}
+mod.fit <-  lm(Rings ~ Whole + Height + Diameter, data = ab)
+mod.fit
+require(MASS)
+require(dplyr)
+
+mod.fit %>% 
+  glance() %>%
+  dplyr::select(r.squared, adj.r.squared)
+#The Rings coefficient describes the expected differences between score in that specific Weight, Height, and Diameter compared to the baseline level
+```
+
+### Question 4
+
+Can the model in Question 3 be improved to make it more parsimonious? Does it significantly change the model fit parameters?
+
+```{r parsimonious, echo=TRUE}
+#Start with a full model
+full.model1 <-  lm(Rings ~ Whole + Height + Diameter + Length + Shucked + Viscera + Shell, data = ab)
+step(object = full.model1, direction = "backward", trace = TRUE)
+#Remove one variable at a time until R^2 does not change. Taking away Shell here. (Other variations of full model won't be shown, repeat of code basically)
+full.model2 <-  lm(Rings ~ Whole + Height + Diameter + Length + Shucked + Viscera, data = ab)
+step(object = full.model2, direction = "backward", trace = TRUE)
+#Final full.model shown here where adjusted R^2 has not increased from the previous. Select model with highest adjusted R^2
+full.model <-  lm(Rings ~ Whole + Height + Length + Shell + Shucked, data = ab)
+step(object = full.model, direction = "backward", trace = TRUE)
+#Finding R^2 and adjusted R^2
+require(MASS)
+require(dplyr)
+
+full.model %>% 
+  glance() %>%
+  dplyr::select(r.squared, adj.r.squared)
+  
+## The model fit parameters does not change significantly.
+```
+
+### Question 5
+
+How about the variable `Sex`? Does it have any significant impact on predicting the `Age` if included in the model from Question 4?
+
+```{r lm with Sex, echo=TRUE}
+mod.fit3 <-  lm(Rings ~ Sex + Height + Diameter, data = ab)
+mod.fit3
+require(MASS)
+require(dplyr)
+
+mod.fit3 %>% 
+  glance() %>%
+  dplyr::select(r.squared, adj.r.squared)
+#Including Sex does not have a much significant impact on predicting age. It is suggested that the difference in values with Sex as a factor is quite small.
+```
+
+### Question 6	
+
+Interpret the results from the model in Question 5. WHat does each coefficeint signify?
+
+SexI, SeXM, Height, and Diameter signifies the significance it has as a factor when predicting ring age of abalones. Height and Diameter have the most significance of the variables when predicting ring age.
+</b></b>
+
+
+
+# Essential details {.tabset .tabset-fade .tabset-pills}
+
+### Deadline and submission
+
+The deadline to submit Homework 3 is **11:00pm on Saturday, 17 April, 2021.** 
+
+- Submit your work by uploading your **Rmd and html file through D2L.Kindly check after submission. If graphs are not displayed in the html after uploading it to d2l, upload the pdf output. **
+
+- Kindly ensure that **the `echo=TRUE` is set in the every chunk option.**
+
+- Please **name all the code chunks**
+
+- Late work **will not be accepted** except under certain extraordinary circumstances.
+
+
+### Help
+
+- Post general questions in the HW3 Teams channel. If you are trying to get help on a code error, explain your error in detail
+
+- Feel free to visit us during our virtual zoom office hours, or make an appointment.
+
+- Communicate with your classmates, but do not share snippets of code.
+
+- The instructional team will not answer any questions within the first 24 hours of this homework being assigned, and we will not answer any questions after 6 P.M of the due date.
+
+### Academic integrity
+
+This is an individual assignment. You may discuss ideas, how to debug code, or how to approach a problem with your classmates.You may also post your general questions in the HW3 channel in Teams.But you may not copy-and-paste another individual's code from this class. As a reminder, below is the policy on sharing and using other's code.
+
+>Similar reproducible examples (reprex) exist online that will help you answer 
+many of the questions posed on in-class assignments, pre-class assignments, 
+homework assignments, and midterm exams. Use of these resources is allowed 
+unless it is written explicitly on the assignment. You must always cite any 
+code you copy or use as inspiration. Copied code without citation is 
+plagiarism and will result in a 0 for the assignment.
+
+
+### Grading
+
+Use the R Markdown blank file that is provided. If you want you can use your own formatting. Self-formatting is at your discretion but is graded. Use the
+in-class assignments and resources available online for inspiration. Another 
+useful resource for R Markdown formatting is
+available at: https://holtzy.github.io/Pimp-my-rmd/
+
+**Topic**|**Points**
+---------|----------:|
+Questions(total 10) | 80 
+R Markdown formatting and knitting | 5
+Communication of results| 10
+Code style| 5
+**Total**|**100**
+
+Please note: Code style includes code efficiency.
+
+# Reference
+
+https://bmccancer.biomedcentral.com/articles/10.1186/s12885-017-3877-1. 
+
+https://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Coimbra
+
+https://www.cdc.gov/healthyweight/assessing/bmi/adult_bmi/index.html
+
+https://archive.ics.uci.edu/ml/datasets/Abalone

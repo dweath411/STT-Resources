@@ -1,0 +1,80 @@
+---
+title: "SS23 STT481: RLab: Cross-Validation"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+We are going to use leave-one-out cross-validation and k-fold cross-validation to estimate the test errors that result from fitting various linear models on the `Auto` data set.
+
+``` {r echo=TRUE}
+library(ISLR)
+data("Auto")
+summary(Auto)
+```
+
+# Leave-One-Out Cross-Validation
+The LOOCV estimate can be automatically computed for any generalized linear model using the `glm()` and `cv.glm()` functions. If we use `glm()` to fit a model without passing in the family argument, then it performs linear regression, just like the `lm()` function.
+``` {r echo=TRUE}
+glm.fit <- glm(mpg ~ horsepower, data = Auto)
+coef(glm.fit)
+```
+
+``` {r echo=TRUE}
+lm.fit <- lm(mpg ~ horsepower, data = Auto)
+coef(lm.fit)
+```
+
+In order to perform cross-validation for generalized linear regression models, we need to use the `boot` package.
+``` {r echo=TRUE}
+library(boot)
+glm.fit <- glm(mpg ~ horsepower, data = Auto)
+cv.err <- cv.glm(Auto, glm.fit) # the default of K is n => LOOCV
+cv.err$delta
+```
+The estimated test error is 24.23151 if we use LOOCV.
+
+If we want to see if higher-order polynomials should be included in the linear regression model, then we can repeat this procedure for increasingly complex polynomial fits.
+``` {r echo=TRUE}
+cv.error <- rep(0,5)
+for (i in 1:5){
+  glm.fit <- glm(mpg ~ poly(horsepower ,i),data = Auto)
+  cv.error[i] <- cv.glm(Auto, glm.fit)$delta[1]
+}
+cv.error
+```
+It appears that quadratic fit has smaller estimated test MSE, but no clear improvement from using higher-order polynomials.
+
+# k-fold Cross-Validation
+We can assign the `K` in the `cv.glm` to 5 or 10 to perform 5-fold or 10-fold CV.
+``` {r echo=TRUE}
+cv.error <- rep(0,5)
+for (i in 1:5){
+  glm.fit <- glm(mpg ~ poly(horsepower ,i),data = Auto)
+  cv.error[i] <- cv.glm(Auto, glm.fit, K = 10)$delta[1]
+}
+cv.error
+```
+Similar to LOOCV, it appears that quadratic fit has smaller estimated test MSE using 10-fold CV but no clear improvement from using higher-order polynomials.
+
+# Leave-One-Out Cross-Validation for KNN
+The `knn.cv` function can perform LOOCV for KNN. Here we use the famous `iris` data to demonstrate the LOOCV for KNN.
+``` {r echo=TRUE}
+library(class)
+set.seed(1) 
+train <- rbind(iris3[,,1], iris3[,,2], iris3[,,3])
+cl <- factor(c(rep("s",50), rep("c",50), rep("v",50)))
+cv.error <- rep(0,100)
+k.candidate <- 1:100
+for (k in k.candidate){ # we try 100 different k's
+  pred.class <- knn.cv(train, cl, k = k)  # this k is for KNN not k-fold CV
+  cv.error[k] <- mean(pred.class != cl)
+}
+plot(k.candidate, cv.error, type = "b")
+k.candidate[which.min(cv.error)]
+```
+
+
+It appears that `K=19` has the smallest estimated test error.

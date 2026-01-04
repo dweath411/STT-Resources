@@ -1,0 +1,223 @@
+---
+title: "Simple linear regression"
+author: "Derien W"
+date: "M6 ICA1"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    number_sections: no
+    df_print: paged
+---
+
+<style type="text/css">
+/* Title */
+h1.title {
+  color: #206005;
+  font-size:40px;
+  font-weight: bold;
+}
+/* Level 1 header */
+h1 {
+  color: #366f1d;
+}
+/* Level 2 header */
+h2 {
+  color: #366f1d;
+}
+/* Level 4 header */
+h4 {
+  font-weight: bold;
+}
+/* Table of contents */
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    z-index: 2;
+    color: #fff;
+    background-color: #a5bf9b;
+    border-color: #337ab7;
+}
+    
+</style>
+
+```{r setup, include=FALSE}
+# global chunk options
+knitr::opts_chunk$set(echo = TRUE,
+                      error = TRUE,
+                      message = FALSE, 
+                      warning = FALSE,
+                      comment = NA,
+                      fig.width=6, 
+                      fig.height=5)
+```
+
+## Introduction
+
+This group assignment will use the Cars93 dataset from the MASS package and is inspired from the Lab 8 written by CMU's Professor Alexandra Chouldechova for her Programming in R for Analytics course.
+
+Packages to be used:
+
+1. `MASS`
+2. `tidyverse`
+3. `broom`
+
+```{r packages, echo=TRUE}
+library(MASS)
+library(tidyverse)
+library(broom)
+```
+
+## Data
+
+The Cars93 dataset consists of data from 93 cars on sale in the USA in 1993. It has 27 variables.
+
+
+```{r data, echo=TRUE}
+attach(MASS::Cars93)
+Cars93 <- as_tibble(MASS::Cars93)
+glimpse(Cars93)
+levels(AirBags)
+```
+
+#### The variables
+
+```{r glimpse.data, echo=FALSE}
+glimpse(Cars93)
+```
+
+## Exploratory data analysis
+
+#### Question 1
+
+Create a scatter plot between `Price` and the `EngineSize`. Comment
+on the relationship. What do you think the correlation is between the variables?
+
+```{r Q1, fig.align='center', fig.height = 4, echo=FALSE}
+#Code for Q1
+ggplot(data = Cars93, aes(x=EngineSize, y=Price)) + geom_point()
+```
+
+#### Question 2
+
+Create scatter plots between `Price` and categorical variables `Airbags` and `Origin`. Comment on the relationship. Add `geom_jitter()` to your plot. What do you notice about the variability in `Price` between different levels?
+
+
+```{r Q2, fig.align='center', fig.height = 4, echo=FALSE}
+ggplot(data = Cars93, aes(x=AirBags, y=Price)) + geom_point() + geom_jitter()
+ggplot(data = Cars93, aes(x=Origin, y=Price)) + geom_point() + geom_jitter()
+
+#It looks like there is not much variability between the levels, they both appear the same
+```
+
+## Model fit
+
+#### Question 3
+
+Fit a linear model with function lm() between variables `Price` and `EngineSize`. Save it as an object mod.fit. What are the values of $b_0$ and $b_1$? Write out the model. *Hint*: `tidy()`
+
+```{r Q3, echo=FALSE}
+ggplot(data = Cars93, aes(x=EngineSize, y=Price)) + geom_point() + stat_smooth(method = "lm", se = FALSE)
+mod.fit <- lm(Price ~ EngineSize, data = Cars93)
+mod.fit %>% 
+  broom::tidy()
+# b0= 4.66, b1 = 5.56
+```
+
+#### Question 4
+
+Interpret the slope of the fitted model. Does the intercept have any practical meaning within the scope of our data?
+# This slope for the model means that we can see how much we expect Y to change as X increases. So as EngineSizes go up, so will the prices.
+
+
+#### Question 5 
+
+Plot the residual plot and comment on the model fit. *Hint*: `augment()`
+
+```{r Q5, echo=FALSE}
+#code for Q5
+mod.fit %>% 
+  augment() %>%
+  ggplot(mapping = aes(x=EngineSize, y = .resid)) + 
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red") +
+  labs(x = "Engine Size", y = "Price")
+```
+
+
+#### Question 6 
+
+How much of the variability in the outcome variable `Price` is explained by the regression equation? Comment on the $R^2$. *Hint*: `glance()`
+
+```{r Q6, echo=FALSE}
+mod.fit %>% 
+  broom::glance()
+# The r.squared value is 0.35, which tells us how fitted the regression line is. So the line isn't really that fitted to the regression line, if it were, it would be closer to 1.
+```
+
+#### Question 7 
+
+Compute the sum of squared residuals. Extract the residuals using `augment()`. Match these residuals to the original data and sort the residuals. Is there manufacturers that on averages produces larger or smaller residuals? What do you notice about the residual patterns with respect to the manufacturers?
+
+```{r Q7, echo=FALSE}
+sum((Cars93$Price - (mod.fit$coefficients[2] + mod.fit$coefficients[1] * EngineSize)) ** 2, na.rm = TRUE)
+mod.fit %>%
+  augment() %>%
+  summarize(rsquared = sum(.resid ** 2))
+
+
+require(MASS)
+require(dplyr)
+Cars93 %>% 
+  dplyr::select(Price, EngineSize, Manufacturer) %>%
+  mutate(resid = mod.fit %>% augment() %>% dplyr::select(.resid))
+```
+
+## Exploring additional variables
+
+
+Below is figure showing how Price varies with EngineSize in the Cars93, with accompanying regression lines. There are two plots, one for USA cars, and one for non-USA cars.
+
+```{r, fig.align='center', fig.height = 4, echo=FALSE}
+qplot(data = Cars93, x = EngineSize, y = Price, colour = Origin)+ 
+  facet_wrap("Origin") + 
+  stat_smooth(method = "lm") + 
+  theme(legend.position="none")
+```
+
+#### Question 8
+
+Use the `lm()` function and fit two models to regress Price on EngineSize with respect to the `Origin` (US and non-US).
+*Hint*: `filter()`
+
+```{r Q8, echo=FALSE}
+# US origin
+mod.fit.USA <- lm(Price ~ EngineSize, data=(Cars93 %>% filter(Origin == "USA")))
+mod.fit.USA %>% broom::tidy()
+mod.fit.USA %>% broom::glance()
+# For non-US origin
+mod.fit.nonUSA <- lm(Price ~ EngineSize, data=(Cars93 %>% filter(Origin == "non-USA")))
+mod.fit.nonUSA %>% broom::tidy()
+mod.fit.nonUSA %>% broom::glance()
+
+```
+
+
+#### Question 9
+
+Compare and contrast the fitted models in Question 8 (1-4 lines).
+# The fitted model with respect to the Origin shows much different values than the fitted line with no respect to Origin. It looks like where the car is from has much of an impact on price + enginesize.
+
+#### Question 10
+
+Multiple regression and categorical predictors were briefly introduced in the class. Do you think analyzing the price based on the size of the engine and the origin will give us more information than the model fitted in Question 3? Justify your answer.
+# I think it will. Analysis of the price is bound to say more than a model fitted. I don't think a fitted model is a bad thing, but doing an analysis on the price will tell us more, or should at least.
+
+
+
+## References {#References-link}
+
+1. http://www.andrew.cmu.edu/user/achoulde/94842/
+

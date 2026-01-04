@@ -1,0 +1,159 @@
+---
+title: "HW 1 Solutions"
+author: "Paul Speaker"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(sqldf)
+library(tidyverse)
+
+order_details <- read.csv("order_details.csv")
+orders <- read.csv("orders.csv")
+territories <- read.csv("territories.csv")
+regions <- read.csv("regions.csv")
+employee_territories <- read.csv("employee_territories.csv")
+employees <- read.csv("employees.csv")
+customers <- read.csv("customers.csv")
+shippers <- read.csv("shippers.csv")
+suppliers <- read.csv("suppliers.csv")
+products <- read.csv("products.csv")
+categories <- read.csv("categories.csv")
+
+```
+
+#1 Perform a sort of orders by employeeID, then by shipVia, and then by freight, 
+# for those orders by shipped to France.
+Order_France <- sqldf("SELECT * FROM orders WHERE shipCountry = 'France' ORDER BY shipVia, freight")
+```{r}
+#1 Perform a sort of orders by employeeID, then by shipVia, and then by freight, 
+# for those orders by shipped to France.
+Order_France <- sqldf("SELECT * FROM orders WHERE shipCountry = 'France' ORDER BY shipVia, freight")
+glimpse(Order_France)
+```
+
+```{r}
+#2 Which shipVia has the largest average cost?
+order_cost <-sqldf("SELECT ShipVia, AVG(freight) FROM orders GROUP BY ShipVia")
+glimpse(order_cost)
+
+
+# shipVia 2 has the largest cost.  This corresponds to shipper United Package 
+# (since the field had a different name I will accept either).
+```
+
+```{r}
+#3 Which product category has the highest average UnitPrice?  The Lowest?
+average_cost <-sqldf("SELECT CategoryID, AVG(UnitPrice) FROM products GROUP BY CategoryID")
+category_costs <- sqldf("Select average_cost.*, categories.categoryName FROM average_cost INNER JOIN categories WHERE average_cost.categoryID = categories.categoryID")
+category_costs
+# Highest category cost is Meat/Poultry, Lowest is Grain/Cereals
+
+
+```
+
+```{r}
+#4 Which products are supplied by a company in the United States?
+USproducts <- sqldf("SELECT products.ProductName FROM products INNER JOIN suppliers WHERE products.SupplierID = suppliers.SupplierID AND suppliers.Country='USA'")
+USproducts
+```
+
+```{r}
+#5 Which shipper is shipping the largest number of units of product?  
+# Answer in terms of units; you do not need to consider quantityPerUnit here.
+full_orders <- sqldf("SELECT orders.*, order_details.productID, order_details.unitPrice, order_details.quantity, order_details.discount from orders INNER JOIN order_details WHERE orders.orderID = order_details.orderID")
+total_shipQ <- sqldf("SELECT SUM(full_orders.quantity), shippers.companyName FROM full_orders INNER JOIN shippers WHERE full_orders.ShipVia = shippers.shipperID GROUP BY full_orders.shipVia")
+total_shipQ
+# United Package, which is shipping 19,945 units
+
+```
+
+```{r}
+#6 Which employee is tied to the most sales revenue?  
+# Give the name, not the code, along with the total revenue for the employee.
+order_revenue <- sqldf("SELECT *, unitPrice*quantity*(1-discount) as revenue from order_details")
+employee_revenue <- sqldf("select orders.employeeID, SUM(order_revenue.revenue) FROM orders INNER JOIN order_revenue WHERE orders.orderID = order_revenue.orderID GROUP BY orders.employeeID")
+revenue_by_name <- sqldf("SELECT employee_revenue.*, employees.lastName, employees.firstName FROM employee_revenue INNER JOIN employees WHERE employee_revenue.employeeID = employees.employeeID")
+revenue_by_name
+# Margeret Peacock has the most revenue
+
+```
+
+
+```{r}
+#7 Find the total revenue for each product category.
+product_category <- sqldf("SELECT categories.categoryName, products.ProductID FROM categories INNER JOIN products WHERE categories.CategoryID =  products.CategoryID")
+Cat_revenue <- sqldf("SELECT product_category.categoryName, SUM(order_revenue.revenue) FROM product_category INNER JOIN order_revenue WHERE product_category.productID = order_revenue.productID  GROUP BY product_category.categoryName")
+Cat_revenue
+```
+
+
+```{r}
+#8 Consider the amount of revenue for each customer.  If there were no discounts applied, 
+# which customer would see the largest increase in cost?
+order_disc <- sqldf("SELECT unitPrice*quantity*discount as revenue_disc, orders.customerID FROM order_details INNER JOIN orders WHERE order_details.orderID = orders.orderID")
+total_disc <- sqldf("SELECT customers.companyName, SUM(order_disc.revenue_disc) FROM customers INNER JOIN order_disc WHERE customers.customerID = order_disc.customerID GROUP BY customers.companyName ORDER BY SUM(order_disc.revenue_disc)")
+# Answer is Save-a-lot Markets
+```
+
+```{r}
+#9 Which order(s) has the most number of items (and how many)?  Give the orderID for this one.
+item_count = sqldf("SELECT orderID, COUNT(productID) FROM order_details GROUP BY orderID ORDER BY count(productID) DESC")
+glimpse(item_count)
+# OrderID 11077 has 25 items
+
+```
+# 10 Create a new field called "InventoryOrderRatio" which is, for each product, the UnitsinStock (the inventory) for the product (across all customers) divided by the quantity ordered for that product.  
+# A high value represents sufficient product in stock, while a low number represents products that are in 
+# danger of running out.  What 3 products are most in danger of running out?
+
+```{r}
+inventory_data <- sqldf("SELECT products.ProductName, products.UnitsInStock, SUM(order_details.quantity) AS total_q 
+                        FROM products 
+                        INNER JOIN order_details 
+                        ON products.productID = order_details.productID 
+                        GROUP BY order_details.productID")
+
+inventory_data$quant <- as.numeric(inventory_data$total_q)
+
+inventory_ratio <- sqldf("SELECT ProductName, UnitsInStock/quant AS InventoryOrderRatio 
+                          FROM inventory_data 
+                          WHERE UnitsInStock > 0 AND total_q > 0 
+                          ORDER BY UnitsInStock/quant")
+
+inventory_ratio
+# 3 smallest inventory_ratios are for Sir Rodney's Scones, Scottish Longbreads, and Rogede sild
+# ok if ones where inventory are 0 are included--these will be a different list.
+```
+
+```{r}
+# 11 A recommender engine looks at which pairs of products tend to be bought by the same # customer, so that if a customer buys one, the recommender engine will recommend they buy the other.  Find which product pairs are most likely to be bought by the same customer. 
+# (Hint: this will require a creative join with the orders data)
+full_orders <- sqldf("SELECT orders.customerID, order_details.productID
+                     FROM orders
+                     INNER JOIN order_details
+                     ON orders.orderID = order_details.orderID")
+
+fo2 <- sqldf("SELECT customerID, productID AS prod1 FROM full_orders")
+order_combos <- sqldf("SELECT fo2.customerID, fo2.prod1, full_orders.productID AS prod2
+                      FROM fo2 
+                      INNER JOIN full_orders 
+                      ON fo2.customerID = full_orders.customerID 
+                      WHERE fo2.prod1 > full_orders.productID")
+
+combo_count <- sqldf("SELECT prod1, prod2, COUNT(customerID) FROM order_combos 
+                     GROUP BY prod1, prod2 
+                     ORDER BY COUNT(customerID) DESC")
+glimpse(combo_count)
+# Most common order pair is product ID 31 and 56, corresponding to Gorgonzola Telino and Gnocchi di nonna Alice
+# Gnocchi with a Gorgonzola sauce is amazing.
+
+```
+

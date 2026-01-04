@@ -1,0 +1,84 @@
+---
+title: "ICA 1"
+author: "Derien Weatherspoon"
+date: '2023-01-18'
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load}
+order_details <- read.csv("order_details.csv")
+orders <- read.csv("orders.csv")
+territories <- read.csv("territories.csv")
+regions <- read.csv("regions.csv")
+employee_territories <- read.csv("employee_territories.csv")
+employees <- read.csv("employees.csv")
+customers <- read.csv("customers.csv")
+shippers <- read.csv("shippers.csv")
+suppliers <- read.csv("suppliers.csv")
+products <- read.csv("products.csv")
+categories <- read.csv("categories.csv")
+library(sqldf)
+library(dplyr)
+```
+
+```{r question}
+#Question 1: Join together the regions and territories datasets, leaving out duplicate columns.
+Q1 <- sqldf("SELECT *
+            FROM regions
+            INNER JOIN territories")
+head(Q1)
+```
+
+
+```{r question 2}
+#Question 2: In the orders_detail data, calculate the average unitPrice for each productid. #summary
+Q2 <- sqldf("SELECT avg(unitPrice), productId 
+                       FROM order_details
+                       GROUP BY productId")
+head(Q2)
+```
+
+```{r question 3}
+#Question 3: Join together customers to orders, and, grouping by customer, 
+#calculate the average freight cost
+#for each, so that the result has average freight cost and customer name.
+#Q3 <- sqldf("SELECT avg(freight), customers
+             #FROM orders
+             #INNER JOIN customers
+             #GROUP BY customers")
+#couldn't get to work
+Q3 <- sqldf("SELECT avg(freight), customers.customerID
+            FROM customers
+            INNER JOIN orders
+            ON customers.customerID = orders.customerID
+            GROUP BY customers.customerID")
+Q3
+```
+
+```{r question 4}
+#Question 4: Join together suppliers and shippers without a key (a Cartesian join)
+Q4 <- sqldf("SELECT *
+             FROM suppliers
+             INNER JOIN shippers")
+head(Q4)
+```
+
+```{r question 5}
+#Question 5: Join together employees to customers, with the result having 
+#customer name, country, and employee first and last name. (2 joins, customerId, employeeId)
+Q5 <- sqldf("SELECT customers.contactName, customers.country, employees.firstName, employees.lastName
+             FROM customers
+             INNER JOIN employees
+             INNER JOIN orders
+             ON customers.customerID = orders.customerID
+                  AND employees.employeeID = orders.employeeID")
+           
+head(Q5)  
+```

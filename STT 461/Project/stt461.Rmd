@@ -1,0 +1,528 @@
+---
+title: "STT 461 Proj"
+author: "Derien Weatherspoon"
+date: "2023-04-18"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Project Overview
+
+###############################################################################
+
+Explanation of the variables in the data set:
+
+- latitude, longitude: GPS Coordinates for a given country
+- country: Countries from different parts of the world
+- country_code: Abbreviations for countries
+- year: year in which happiness data was collected
+- value: GINI index value per country per year, ranging from 0 to 1
+- score: Happiness score, which is explained by the following: GDP per capita,
+Healthy Life Expectancy, Social support, Freedom to make life choices, Generosity,                
+Corruption Perception, and Residual error.
+- gdp: Gross Domestic Product 
+- support: Social support
+- life_expectancy: Life expectancy 
+- freedom: How free the citizens of a given country are to make life choices on their own
+- trust: How much trust the people have in their government
+- generosity: Generosity of the citizens/government
+
+###############################################################################
+
+## Loading Packages
+
+```{r packages, message=FALSE, warning=FALSE}
+library(dplyr) 
+library(sqldf)  
+library(tidyr)
+library(MASS)
+library(stringr)
+library(ggplot2)
+library(ggcorrplot)
+library(glmnet)
+library(tree)
+library(rpart)
+library(rpart.plot)
+library(leaps)
+library(randomForest)
+```
+
+## Import Data
+
+```{r data}
+gini <- read.csv("gini1.csv")
+coords <- read.csv('coords.csv')
+```
+
+# Feature Engineering
+
+```{r combining happy}
+hap15 <- read.csv('2015.csv')
+hap16 <- read.csv('2016.csv')
+hap17 <- read.csv('2017.csv')
+hap18 <- read.csv('2018.csv')
+hap19 <- read.csv('2019.csv')
+hap20 <- read.csv('2020.csv')
+hap21 <- read.csv('2021.csv')
+
+hap15$year = 2015
+hap16$year = 2016
+hap17$year = 2017
+hap18$year = 2018
+hap19$year = 2019
+hap20$year = 2020
+hap21$year = 2021
+
+colnames(hap15) <- c('country', 'region', 'rank', 'score', 'se', 'gdp', 'support', 
+                     'life_expectancy', 'freedom', 'trust', 'generosity', 'corruption', 'year')
+hap15 <- hap15[,c(1,4,6,7,8,9,10,11,13)]
+
+hap16 <- hap16[,c(1,4,7,8,9,10,11,12,14)]
+colnames(hap16) <- c('country', 'score', 'gdp', 'support', 'life_expectancy',
+                     'freedom', 'trust', 'generosity', 'year')
+
+hap17 <- hap17[,c(1,3,6,7,8,9,10,11,13)]
+colnames(hap17) <- c('country', 'score', 'gdp', 'support', 'life_expectancy',
+                     'freedom', 'trust', 'generosity', 'year')
+
+hap18 <- hap18[,c(2,3,4,5,6,7,8,9,10)]
+colnames(hap18) <- c('country', 'score', 'gdp', 'support', 'life_expectancy',
+                     'freedom', 'generosity', 'trust', 'year')
+hap18 <- hap18 %>% relocate('trust', .before='generosity')
+
+hap19 <- hap19[,c(2,3,4,5,6,7,8,9,10)]
+colnames(hap19) <- c('country', 'score', 'gdp', 'support', 'life_expectancy', 
+                     'freedom', 'generosity', 'trust', 'year')
+hap19 <- hap19%>%relocate('trust', .before='generosity')
+
+hap20 <- hap20[,c(1,3,7,8,10,11,12,16,21)]
+colnames(hap20) <- c('country','score','gdp','support','freedom', 'generosity',
+                     'trust', 'life_expectancy', 'year')
+hap20 <- hap20%>%relocate('life_expectancy', .before='freedom')
+
+hap21 <- hap21[,c(1,3,7,8,10,11,12,16,21)]
+colnames(hap21) <- c('country', 'score', 'gdp', 'support', 'freedom',
+                     'generosity', 'trust', 'life_expectancy', 'year')
+hap21 <- hap21%>%relocate('life_expectancy', .before='freedom')
+```
+
+## Bind all Happy data
+
+```{r all happy}
+happy <- rbind(hap15,hap16,hap17,hap18,hap19,hap20,hap21)
+```
+
+## Match the names for GINI and Happy data
+
+```{r name matching, include=FALSE}
+matching_names <- gini$country_name[gini$country_name %in% happy$country]
+matches <- str_detect(happy$country, paste(matching_names, collapse = "|"))
+happy$country <- ifelse(matches, happy$country, matching_names[match(happy$country, matching_names)])
+differences <- happy$country[!happy$country %in% gini$country_name]
+cat(differences, sep = "\n")
+remove_idx <- which(happy$country %in% differences)
+happy <- subset(happy, !country %in% differences)
+```
+
+## Join the geographical data and GINI data
+
+```{r geo and gini}
+geo_gini <- sqldf('SELECT * from coords INNER JOIN gini ON coords.country = gini.country_name')
+geo_gini <- geo_gini[, c(2,3,4,5,7,8)]
+```
+
+### Join geo_gini with happy data set
+
+```{r all data}
+data <- sqldf('SELECT * from geo_gini INNER JOIN happy ON 
+              geo_gini.country = happy.country AND geo_gini.year = happy.year ORDER BY year')
+df <- data[,c(1,2,3,4,5,6,8,9,10,11,12,13,14)]
+```
+
+### Write new data as a new csv
+
+```{r write as a csv}
+#write.csv(df, file='gini_geo_happy.csv', row.names = F)
+```
+
+Our target variable here is **happiness score**. Other features used include GINI index, health, trust, freedom, and a few others.
+
+The target field for this question will be the happiness index. 
+
+## Read in CSV and split the data
+
+```{r train, test, warning=FALSE, message=FALSE}
+set.seed(1)
+df <- read.csv("gini_geo_happy.csv")
+df$trust <- as.double(df$trust) # change to a double first
+df$trust[is.na(df$trust)] <- mean(df$trust[!is.na(df$trust)])
+row_nums <- 1:nrow(df)
+train_split <- sample(row_nums, 0.7*length(row_nums)) # 70-30 split
+train_data <- df[(train_split),]
+test_data <- df[-train_split,]
+train_data_no_country <- train_data[,!names(train_data) %in% c("country", "country_code")]
+numerics <- df[,c("latitude", "longitude", "value", "score", "gdp", "support",
+                  "life_expectancy", "freedom", "trust", "generosity")] # df with numeric features only
+```
+
+## Description of what you do with the data before modeling.
+
+Before modeling the data, we first split the data into a 70-30 train-test split as seen above, then check for NAs, do a little bit of EDA to check any important factors, such as correlation.
+
+# EDA
+
+## Check NAs
+
+```{r check null values}
+train_data <- na.omit(train_data)
+train_data_no_country <- na.omit(train_data_no_country)
+sum(is.na(train_data))
+sum(is.na(test_data))
+sum(is.na(df))
+sum(is.na(train_data_no_country))
+```
+There are no null values within the training or test data. So there is no need to impute any missing values with the median for those data sets. There is one missing value for the main df when I changed trust into a numeric variable, so I will remove the NA, since it is only one.
+
+```{r scaled data}
+scaled.data <- model.matrix(score ~., data = train_data_no_country)[,-1]
+head(scaled.data)
+sco <- train_data$score # make the response variable 
+```
+
+
+## Histograms for response; score
+```{r histograms for response}
+par(mfrow = c(1,3))
+hist(x = train_data$score, col = "darkgreen", freq = T, main = "Dist of score freq training")
+hist(x = test_data$score, col = "darkblue", freq = T, main = "Dist of score freq for test")
+hist(x = df$score, col = "darkred", freq = T, main = "Dist of score freq for df")
+```
+## Correlation matrix
+
+```{r correlations}
+ggcorrplot(cor(numerics), lab_size = 1.5, tl.cex = 5, lab = T, title = "Correlation map",  hc.order = TRUE) # correlation map
+round(cor(numerics),
+  digits = 2 # rounded to 2 decimals
+)
+```
+life_expectancy is the variable most correlated with the response variable here, score. Following life_expectancy in highest correlation are support, freedom, longitude. 
+
+### Plotting the correlated variables vs response
+
+```{r life_expectancy vs score, message=FALSE}
+ggplot(data = df[df$score > 0,], aes(x = life_expectancy, y = score)) +
+  geom_point() +
+  geom_smooth(method = NULL, se = T, colour = "blue", linetype = "solid") +
+  labs(x = "Life Expectancy",
+       y = "Score",
+       title = "life_expectancy vs. score"
+       )
+```
+```{r support vs score, message=FALSE}
+ggplot(data = df[df$score > 0,], aes(x = support, y = score)) +
+  geom_point() +
+  geom_smooth(method = NULL, se = T, colour = "blue", linetype = "solid") +
+  labs(x = "Social Support",
+       y = "Score",
+       title = "support vs. score"
+       )
+```
+```{r freedom vs score, message=FALSE}
+ggplot(data = df[df$score > 0,], aes(x = freedom, y = score)) +
+  geom_point() +
+  geom_smooth(method = NULL, se = T, colour = "blue", linetype = "solid") +
+  labs(x = "Freedom",
+       y = "Score",
+       title = "freedom vs. score"
+       )
+```
+```{r longitude and score, message=FALSE}
+ggplot(data = df[df$score > 0,], aes(x = longitude, y = score)) +
+  geom_point() +
+  geom_smooth(method = NULL, se = T, colour = "blue", linetype = "solid") +
+  labs(x = "Longitude",
+       y = "Score",
+       title = "longitude vs. score"
+       )
+
+```
+
+
+## Description of modeling to be done 
+
+Modeling to be done will include a mix of regression models looking for the best accuracy scores, including adjusted R^2 values, AIC/BIC where applicable, and prediction scores.
+
+Build a regression model to predict a country’s happiness index based on all features, soon down to only significant features.
+
+# Linear Regression Modeling
+
+```{r model 1 (linear regression)}
+lm.fit <- lm(score ~ ., data = train_data[,!names(train_data) %in% c("country", "country_code")]) 
+summary(lm.fit)
+```
+
+```{r model 2 (linear regression)}
+lm.fit2 <- lm(score ~ . - latitude - value - gdp, data = train_data[,!names(train_data) %in% c("country", "country_code")]) # remove insignificant variables
+summary(lm.fit2) 
+```
+
+```{r model 3, log transformation on response}
+lm.fit3 <- lm(log(score) ~ . -value - latitude - gdp, data = train_data[,!names(train_data) %in% c("country", "country_code")]) 
+summary(lm.fit3) # with log transformation on response
+
+# Lower Adjusted R^2, not worth.
+```
+It looks like ``lm.fit`` works just fine, it has the best scores of the 4 linear models. And has latitude excluded, since it is insignificant. 
+
+## Map residual data from model
+
+```{r check residual plots}
+par(mfrow = c(2,2))
+plot(lm.fit)
+```
+There are some outliers and non-homoscedasticity points, but due to size of data, and what we've already removed, I will leave them in. ## May remove later ## 
+
+# Stepwise Selection
+
+```{r model 4, forward stepwise}
+forward.fit <- regsubsets(score ~ ., data = train_data_no_country, nvmax = ncol(train_data_no_country), method = "forward")
+#summary(forward.fit)
+forward.summary <- summary(forward.fit)
+forward.summary$rsq # [9] has the best rsq value
+forward.summary
+
+# Rsq increased as more variables were added
+```
+
+```{r criterion values}
+paste(c('RSS:',which.min(forward.summary$rss)))
+paste(c('Adjusted RSquared:',which.max(forward.summary$adjr2)))
+paste(c('Cp:',which.min(forward.summary$cp)))
+paste(c('BIC:',which.min(forward.summary$bic)))
+```
+
+The criterion I decide to go with is BIC, choosing the least number of variables
+
+```{r coefs forward}
+coef(object = forward.fit, id = which.min(forward.summary$bic))
+
+# Use this when predicting with forward stepwise
+```
+
+The coefficients the model chose were longitude, year, support, life_expectancy, freedom, trust and generosity.
+
+```{r predict regsubsets}
+predict.regsubsets <- function (object, newdata , id, ...){
+  form <- as.formula(object$call[[2]])  # formula of null model
+  mat <- model.matrix(form, newdata)    # building an "X" matrix from newdata
+  coefi <- coef(object, id = id)        # coefficient estimates associated with the object model containing id non-zero variables
+  xvars <- names(coefi)            # names of the non-zero coefficient estimates
+  return(mat[,xvars] %*% coefi)    # X[,non-zero variables] %*% Coefficients[non-zero variables]
+}
+# Function to predict on forward stepwise
+```
+
+```{r predict forward selection}
+fwd.pred <- predict.regsubsets(forward.fit, newdata = test_data, id = which.min(forward.summary$bic))
+head(fwd.pred)
+```
+
+```{r analysis of forward}
+fwd.mse <- mean((fwd.pred - test_data$score)^2)
+corr_coef_fwd <- cor(fwd.pred, test_data$score)
+paste(c("Forward Stepwise Mean Squared Error:",fwd.mse))
+paste(c("Forward Stepwise Correlation Coefficient:",corr_coef_fwd))
+```
+
+
+## Use the final model(s), predict the happiness values of countries in the data set, and check deviation from true value.
+
+```{r predictions from best linear model}
+#  use lm.fit2
+lin.pred <- predict(lm.fit2, newdata = test_data)
+head(lin.pred)
+
+# predictions for happiness values from linear model
+```
+
+```{r analysis of linear model predictions}
+lin.mse <- mean((lin.pred - test_data$score)^2)
+corr_coef <- cor(lin.pred, test_data$score)
+paste(c("Linear Mean Squared Error:",lin.mse))
+paste(c("Linear Correlation Coefficient:",corr_coef))
+```
+
+Forward Stepwise and Linear Regression produced the same predictions.
+Since these predicted the same values, I will try another Regression method that will eliminate empty values.
+
+# Lasso Regression
+
+```{r Lasso}
+set.seed(1)
+lasso.fit <- glmnet(scaled.data, sco, alpha = 1)
+names(lasso.fit)
+cv.lasso <- cv.glmnet(scaled.data, sco, alpha = 1, nfolds = 10)
+best_value <- cv.lasso$lambda.min
+best_value
+plot(cv.lasso)
+```
+
+```{r Lasso predictions}
+lasso.pred <- predict(lasso.fit, s = best_value, newx = model.matrix(score ~. - country - country_code, data = test_data)[,-1])
+head(lasso.pred)
+
+```
+
+```{r coefs lasso}
+coef(lasso.fit, s = best_value) # latitude and gdp
+```
+
+```{r analysis of lasso}
+lasso.mse <- mean((lasso.pred - test_data$score)^2)
+corr_coef_lasso <- cor(lasso.pred, test_data$score)
+paste(c("Lasso Mean Squared Error:",lasso.mse))
+paste(c("Lasso Correlation Coefficient:",corr_coef_lasso))
+```
+Slightly different values than the other 2 prediction models, with a slightly lower MSE.
+
+# Decision Tree Method
+
+Since the Regression models produced nearly identical results, I will fit a Decision Tree model to see if that implies anything different.
+
+```{r fit the tree}
+tree.fit <- tree(score ~., data = train_data_no_country)
+summary(tree.fit) 
+```
+```{r looking at raw tree}
+tree.fit
+```
+For an example analysis of the tree, we can look at node 3. This node asked whether the gdp was more than 0.95554, with a number of observations of 167. If gdp was in this threshold, then the tree split the average, and if the gdp from this point was more than 0.95554, then the tree predicted that the happiness score for this gdp was 6.228.
+
+## Plot tree using rpart
+
+```{r rpart plot}
+r.tree <- rpart(score ~ ., data = train_data_no_country)
+rpart.plot(r.tree)
+```
+According to the decision tree, it looks like gdp has the most importance when determining happiness score. 
+
+## Make predictions based on tree
+
+```{r tree predictions}
+tree.pred <- predict(tree.fit, newdata = test_data)
+head(tree.pred)
+```
+Still, even a decision tree gives more or less the same results when it comes to predictions.
+
+Since this is the case, I will try one more tree based method, to check other feature importance.
+
+## Tree MSE 
+
+```{r Decision Tree MSE}
+tree.mse <- mean((tree.pred - test_data$score)^2)
+corr_coef_tree <- cor(tree.pred, test_data$score)
+paste(c("Tree Mean Squared Error:",tree.mse))
+paste(c("Tree Correlation Coefficient:",corr_coef_tree))
+```
+
+# Random Forest
+
+```{r random forest fitting}
+set.seed(1)
+sqrt(ncol(train_data_no_country) - 1) # 3.16... ~ 3 >> mtry to be 3 
+rf.fit <- randomForest(score ~ ., data = train_data_no_country, mtry = 3, importance = T, ntree = 1000)
+```
+
+```{r rf}
+rf.fit
+```
+## Check variable importance
+
+```{r rf importance}
+importance(rf.fit)
+varImpPlot(rf.fit)
+```
+So again, we see that gdp is included as the most important variable in the tree based method. latitude and longitude, as well as life expectancy come in as close runner-ups. Now I will see if the predictions match the other methods used.
+
+## Random Forest Predictions
+
+```{r random forest predictions}
+rf.pred <- predict(rf.fit, newdata = test_data)
+head(rf.pred)
+```
+
+## Random Forest MSE
+
+```{r rf MSE}
+rf.mse <- mean((rf.pred - test_data$score)^2)
+corr_coef_rf <- cor(rf.pred, test_data$score)
+paste(c("RF Mean Squared Error:",rf.mse))
+paste(c("RF Correlation Coefficient:",corr_coef_rf))
+
+```
+
+And they slightly do match up. But the random forest model has the most variance in predictions from the rest of the models made.
+
+## MSE Plot
+
+```{r mse hist}
+mse <- c(0.3133342, 0.3133342, 0.3061719, 0.3476621, 0.1391869)
+
+#hist(mse, main = "Mean Square Errors", xlab = "Linear // Forward // Lasso // Decision Tree // Random Forest", breaks = 10, labels = T, axes = T, ylim = 5)
+barplot(mse, main = "MSE", col = as.factor(mse), names.arg = c("Linear", "Forward", "Lasso", "Decision Tree", "RF"),
+        beside = F, xlab = "Methodologies",width = 1, axisnames = T)
+```
+```{r predictions plots}
+par(mfrow = c(2,2))
+plot(lin.pred, test_data$score, col = "red")
+abline(0,1)
+
+plot(tree.pred, test_data$score, col = "darkgreen")
+abline(0,1)
+
+plot(rf.pred, test_data$score, col = "blue")
+abline(0,1)
+
+plot(lasso.pred, test_data$score, col = "purple")
+abline(0,1)
+
+```
+
+# Map GINI and Happiness scores
+
+```{r Mapping GINI index}
+library(maps)
+
+world_map <- map_data('world')
+world_map <- subset(world_map, region != 'Antarctica')
+
+ggplot(df) + geom_map(dat=world_map, map = world_map, aes(map_id = region),
+                      fill='white', color='#7f7f7f', linewidth=0.25)+ geom_map(map=world_map, aes(map_id = country, fill = value), linewidth=0.25) + scale_fill_gradient(low='#fff7bc', high='#cc4c02', name='GINI Index') + expand_limits(x=world_map$long, y=world_map$lat) + 
+  labs(title='Gini Index Heat Map') + xlab('longitude') + ylab('latitude')
+```
+High GINI index (inequality) scores are heavily concentrated in South America and South Africa.
+
+```{r Mapping Happiness score}
+ggplot(df) + geom_map(dat=world_map, map = world_map, aes(map_id = region),
+            fill='white', color='#7f7f7f', linewidth=0.25) + geom_map(map=world_map, 
+          aes(map_id = country, fill = score), linewidth=0.25) + 
+  scale_fill_gradient(low='#e8f3ff', high='#3f00ff', name='Happiness Index') + 
+  expand_limits(x=world_map$long, y=world_map$lat) + labs(title='Happiness Heat Map') + 
+  xlab('longitude') + ylab('latitude')
+
+```
+
+High Happiness scores found in South America, Western Europe, Australia, and Canada.
+
+```{r predicted happiness}
+ggplot(df) + geom_map(dat=world_map, map = world_map, aes(map_id = region), 
+                      fill='white', color='#7f7f7f', linewidth=0.25) + 
+  geom_map(map=world_map, aes(map_id = country, fill = predict(rf.fit, df)),
+           linewidth=0.25) + scale_fill_gradient(low='#e8f3ff',
+            high='#3f00ff', name='Happiness Index') + expand_limits(x=world_map$long, y=world_map$lat) + labs(title='Happiness Heat Map from Predictive Model') + xlab('Longitude') + ylab('Latitude')
+```
+Modeled happiness values are highly accurate. The model most frequently over-predicts happiness values, but general scores are close to actual values.
+

@@ -1,0 +1,83 @@
+---
+title: "STT 461 ICA 6"
+author: "Derien Weatherspoon"
+date: "2023-03-01"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+library(MASS)
+```
+
+
+## Question 1
+Take a bivariate normal distribution where the mean is(2, 4), var(X) = 3, var(Y) = 5, and cov(X,Y) = 3.
+a. Create and plot 1,000 simulations of this distribution. 
+b. Create 1,000,000 simulations of this distribution. Find
+i. E(X)
+ii. E(Y)
+iii. Var(X)
+iv. Var(Y)
+v. Cov(X, Y) (Note that (iii)-(v) can be done with a single command)
+vi. Var(X + Y). Is this equal to the sum of the individual variances?
+c. Vary the covariance with a few different values (positive, negative and zero). Create plots of 1,000 simulations and see how they vary.
+
+```{r Q1 a}
+
+mean <- c(2,4)
+var_x_q1 <- 3
+var_y_q1 <- 5
+cov_xy <- 3/(sqrt(3)*sqrt(5))
+Sigma <- cbind(c(var_x_q1,cov_xy*sqrt(var_x_q1)*sqrt(var_y_q1)),c(cov_xy*sqrt(var_x_q1)*sqrt(var_y_q1),var_y_q1))
+
+plot(mvrnorm(1000, mu = c(2,4), Sigma))
+```
+```{r Q1 b}
+dist1M<- mvrnorm(1000000, mu = c(2,4), Sigma)
+ex <- mean(dist1M[,1])
+ex
+ey <- mean(dist1M[,2])
+ey
+vx <- var(dist1M[,1])
+vx
+vy <- var(dist1M[,2])
+vy
+
+
+covxy <- mean((dist1M[,1]-ex)*(dist1M[,2]-ey))
+covxy
+var_x_y <- vx + vy + 2*c(vx+vy)
+var_x_y
+```
+```{r Q1 c}
+cov_xy1 <- -2/(sqrt(2)*sqrt(3)) #negative 
+sigma1 <- cbind(c(var_x_q1,cov_xy1*sqrt(var_x_q1)*sqrt(var_y_q1)),c(cov_xy1*sqrt(var_x_q1)*sqrt(var_y_q1),var_y_q1))
+plot(mvrnorm(1000, mu = c(2,4), sigma1))
+cov_xy2 <- 0/(sqrt(4)*sqrt(4)) #zero
+sigma2 <- cbind(c(var_x_q1,cov_xy2*sqrt(var_x_q1)*sqrt(var_y_q1)),c(cov_xy2*sqrt(var_x_q1)*sqrt(var_y_q1),var_y_q1))
+plot(mvrnorm(1000, mu = c(2,4), sigma2)) 
+cov_xy3 <- 100/(sqrt(1)*sqrt(2)) #large positive
+sigma3 <- cbind(c(var_x_q1,cov_xy3*sqrt(var_x_q1)*sqrt(var_y_q1)),c(cov_xy3*sqrt(var_x_q1)*sqrt(var_y_q1),var_y_q1))
+#plot(mvrnorm(1000, mu = c(2,4), sigma3)) #doesn't work with this covariance
+```
+## Question 2
+For this exercise we will look at conditional expectations. Revert back to the original bivariate normal distribution in (1). Create 1,000,000 simulations and estimate:
+a. E(X|Y>4)
+b. E(Y|X<2)
+By filtering the simulation.* For each, note how many of the 1,000,000 simulations survive the filter. How do these values compare to the unconditional expectations? Do the changes make sense?
+
+```{r Q2 a}
+
+```
+
+## Question 3
+Now change the covariance so that cov(X, Y) = -4. Re-do (2) and compare the conditional expectations to the unconditional expectations.
+
+```{r}
+
+```
+

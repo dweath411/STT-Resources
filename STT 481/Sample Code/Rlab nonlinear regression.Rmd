@@ -1,0 +1,204 @@
+---
+title: "SS23 STT481: RLab: Non-linear Modeling"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+``` {r echo=TRUE}
+library(ISLR)
+attach(Wage)
+```
+**Goal**: We would like to analyze the `Wage` data set, which contains income and demographic information for males who reside in the central Atlantic region of the United States.
+
+# Polynomial Regression
+Fit a fourth-degree polynomial in `age`.
+``` {r echo=TRUE}
+fit <- lm(wage ~ poly(age, 4), data = Wage)
+coef(summary(fit))
+```
+
+Predict using the fourth-degree polynomial in `age`
+``` {r echo=TRUE}
+agelims <- range(age)
+age.grid <- seq(from = agelims[1], to = agelims[2]) ## test data
+preds <- predict(fit, newdata = list(age = age.grid), se = TRUE)
+se.bands <- cbind(preds$fit + 2*preds$se.fit, preds$fit - 2*preds$se.fit)
+```
+
+Plot the data and add the fit from the degree-4 polynomial.
+``` {r echo=TRUE}
+par(mar=c(4.5,4.5,1,1) ,oma=c(0,0,4,0))
+plot(age, wage, xlim = agelims, cex = .5, col = "darkgrey")
+title("Degree-4 Polynomial", outer = T)   # make title
+lines(age.grid, preds$fit, lwd = 2, col = "blue") # prediction 
+matlines(age.grid, se.bands, lwd = 1, col = "blue", lty = 3) # confidence interval
+```
+
+
+## Polynomial Logistic Regression Model
+Next we consider the task of predicting whether an individual earns more than $250,000 per year. We proceed much as before, except that first we create the appropriate response vector, and then apply the `glm()` function using `family="binomial"` in order to fit a polynomial logistic regression model.
+
+``` {r echo=TRUE}
+fit <- glm(I(wage>250) ~ poly(age, 4), data = Wage, family = binomial)
+```
+
+Similarly, we can use `predict()` to make predictions.
+``` {r echo=TRUE}
+preds <- predict(fit, newdata = list(age = age.grid), type = "response")
+plot(age, I(wage>250),xlim = agelims ,type="n", ylim = c(0,.2))
+points(jitter(age), I((wage>250)/5), cex = .5, pch = "|", col = "darkgrey")
+lines(age.grid, preds, lwd = 2, col="blue")
+```
+
+We have drawn the age values corresponding to the observations with `wage` values above 250 as gray marks on the top of the plot, and those with wage values below 250 are shown as gray marks on the bottom of the plot. We used the `jitter()` function to jitter the `age` values a bit so that observations with the same age value do not cover each other up. This is often called a *rug plot*.
+
+# Splines for One Predictor
+## Cubic Splines
+The `bs()` function generates the entire matrix of `bs()` basis functions for splines with the specified set of knots. By default, cubic splines are produced.
+
+``` {r echo=TRUE}
+library(splines)
+fit <- lm(wage ~ bs(age, df = 6), data = Wage) # 3 knots
+pred <- predict(fit, newdata = list(age = age.grid), se = T)
+plot(age, wage, col = "gray")
+lines(age.grid, pred$fit, lwd = 2)
+lines(age.grid, pred$fit + 2*pred$se, lty = "dashed")
+lines(age.grid, pred$fit - 2*pred$se, lty = "dashed")
+abline(v = attr(bs(age, df = 6), "knots"), lty = 2) # knots placement
+```
+The df option to produce a spline with knots at uniform quantiles of the data. 
+``` {r echo=TRUE}
+attr(bs(age, df = 6), "knots") # 3 uniform knots
+```
+In this case `R` chooses knots at ages 33.8, 42.0, and 51.0, which correspond to the 25th, 50th, and 75th percentiles of age. The function `bs()` also has a degree argument, so we can fit splines of any degree, rather than the default degree of 3 (which yields a cubic spline).
+
+It will be interesting to look at the basis representation of the cubic spline.
+``` {r echo=TRUE}
+par(mfrow = c(2, 3))
+for(i in 1:6) plot(age, bs(age, df = 6)[,i], main = paste("basis", i))
+```
+
+You could prespecify knots at ages 25, 40, and 60. This produces a spline with six basis functions. (Recall that a cubic spline with three knots has seven degrees of freedom; these degrees of freedom are used up by an intercept, plus six basis functions.) 
+
+``` {r echo=TRUE}
+library(splines)
+par(mfrow = c(1, 1))
+fit <- lm(wage ~ bs(age, knots = c(25,40,60)), data = Wage) 
+# set knots at age = c(25,40,60)
+pred <- predict(fit, newdata = list(age = age.grid), se = T)
+plot(age, wage, col = "gray")
+lines(age.grid, pred$fit, lwd = 2)
+lines(age.grid, pred$fit + 2*pred$se, lty = "dashed")
+lines(age.grid, pred$fit - 2*pred$se, lty = "dashed")
+```
+
+``` {r echo=TRUE}
+dim(bs(age, knots = c(25,40,60))) 
+dim(bs(age, df = 6))  # same dimensions because 3 knots = 6 df but different knot locations
+```
+
+## Natural Cubic Splines
+In order to instead fit a natural spline, we use the `ns()` function. Here `ns()` we fit a natural spline with four degrees of freedom.
+``` {r echo=TRUE}
+fit2 <- lm(wage ~ ns(age, df = 4), data = Wage)
+attr(ns(age, df = 4), "knots") # 3 uniform knots
+pred2 <- predict(fit2, newdata = list(age = age.grid), se = T)
+plot(age, wage, col = "gray")
+lines(age.grid, pred2$fit, col = "red", lwd = 2)
+lines(age.grid, pred2$fit + 2*pred$se, lty = "dashed")
+lines(age.grid, pred2$fit - 2*pred$se, lty = "dashed")
+abline(v = attr(ns(age, df = 4), "knots"), lty = 2) # knots placement
+```
+As with the `bs()` function, we could instead specify the knots directly using the knots option.
+
+## Smoothing Spline
+In order to fit a smoothing spline, we use the `smooth.spline()` function.
+``` {r echo=TRUE}
+
+plot(age, wage, xlim = range(age), cex = .5, col = "darkgrey")
+title (" Smoothing Spline ")
+fit1 <- smooth.spline(age, wage, lambda = 5)
+fit2 <- smooth.spline(age, wage, lambda = 0.0001)
+fit3 <- smooth.spline(age, wage, cv = TRUE)
+fit3$lambda
+lines(fit1, col = "red", lwd = 2)
+lines(fit2,col = "green",lwd = 2)
+lines(fit3,col = "blue",lwd = 2)
+legend("topright",legend=c("lambda 5","lambda 0.0001","lambda 0.028"),
+       col = c("red", "green", "blue"), lty = 1, lwd = 2, cex = .8)
+
+predict(fit3, x = c(25,45,65))$y
+```
+in the first call to `smooth.spline()`, we specified `df=16`. The function then determines which value of $\lambda$ leads to 16 degrees of freedom. In the second call to `smooth.spline()`, we select the smoothness level by cross-validation; this results in a value of $\lambda$ that yields 6.8 degrees of freedom.
+
+## Local Regression
+``` {r echo=TRUE}
+plot(age, wage, xlim = agelims, cex = .5, col = "darkgrey")
+title(" Local Regression ")
+fit <- loess(wage ~ age, span = .2, data = Wage)
+fit2 <- loess(wage ~ age, span = .5, data = Wage)
+lines(age.grid, predict(fit, data.frame(age = age.grid)), 
+      col = "red", lwd = 2)
+lines(age.grid, predict(fit2, data.frame(age = age.grid)), 
+      col = "blue", lwd = 2)
+legend("topright", legend = c("Span=0.2", "Span=0.5"), 
+       col=c("red", "blue"), lty = 1, lwd = 2, cex = .8)
+```
+Here we have performed local linear regression using spans of 0.2 and 0.5: that is, each neighborhood consists of 20\% or 50\% of the observations. The larger the span, the smoother the fit.
+
+# Generalized Additive Models (GAMs) for Multiple Predictors
+We now fit a GAM to predict wage using natural spline functions of `year` and `age`, treating `education` as a qualitative predictor. There are typically two ways to fit a GAM. First, we can do this using the `lm()` function.
+``` {r echo=TRUE}
+gam1 <- lm(wage ~ ns(year, 4) + ns(age, 5) + education, data = Wage)
+```
+The `ns` function fits natural splines with 4 and 5 degrees of freedom.
+
+The second approach is to use the `gam` function in the `gam` package. The `s()` function, which is part of the `gam` library, is used to indicate that `s()` we would like to use a smoothing spline. Note that smoothing splines cannot be fit using the `lm` function decribed above.
+``` {r echo=TRUE}
+library(gam)
+gam.m3 <- gam(wage ~ s(year, 4) + s(age, 5) + education, data = Wage)
+par(mfrow = c(1, 3))
+plot(gam.m3, se = TRUE, col = "blue")
+```
+We specify that the function of `year` should have 4 degrees of freedom, and that the function of `age` will have 5 degrees of freedom. Since `education` is qualitative, we leave it as is, and it is converted into four dummy variables.
+
+The generic `plot()` function recognizes that `gam2` is an object of class `gam`, and invokes the appropriate `plot.Gam()` method. Conveniently, even though `gam1` is not of class `gam` but rather of class `lm`, we can still use `plot.Gam()` on it. 
+``` {r echo=TRUE}
+par(mfrow = c(1,3))
+plot.Gam(gam1, se = TRUE, col = "red")
+```
+
+The `summary()` function produces a summary of the gam fit.
+``` {r echo=TRUE}
+summary(gam.m3)
+```
+The p-values for `year` and `age` correspond to a null hypothesis of a linear relationship versus the alternative of a non-linear relationship. The large p-value for `year` reinforces our conclusion from the ANOVA test that a linear function is adequate for this term. However, there is very clear evidence that a non-linear term is required for `age`. Thus, we can remove the non-linear term for `year` and leave its linear term. 
+``` {r echo=TRUE}
+gam.m2 <- gam(wage ~ year + s(age, 5) + education, data = Wage)
+par(mfrow = c(1, 3))
+plot(gam.m2, se = TRUE, col = "blue")
+summary(gam.m2)
+```
+
+
+We can make predictions from `gam` objects, just like from `lm` objects, using the `predict()` method for the class gam.
+``` {r echo=TRUE}
+### I made a test data
+test <- Wage[1:3,c(1,2,5)]
+test[,1:2] <- rep(c(2011, 60), each = 3)
+test
+preds <- predict(gam.m2, newdata = test)
+preds
+```
+
+
+We can also use local regression fits as building blocks in a GAM, using the `lo()` function.
+``` {r echo=TRUE}
+gam.lo <- gam(wage ~ s(year, df = 4) + lo(age, span = 0.7) + education, data = Wage)
+par(mfrow = c(1,3))
+plot(gam.lo, se = TRUE, col = "green")
+```
+Here we have used local regression for the `age` term, with a span of 0.7.

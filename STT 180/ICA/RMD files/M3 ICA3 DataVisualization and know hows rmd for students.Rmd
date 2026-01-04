@@ -1,0 +1,400 @@
+---
+title: "Data visualizations and know-hows"
+author: "Derien W - 3"
+date: "M3 ICA3"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    number_sections: yes
+    toc_float: yes
+    theme: cerulean
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE,
+                      comment = NA)
+```
+
+# The data
+
+For this section we will use the `nfl` data.
+We will use the `tidyverse` and `ggiraph` packages. You will need to first
+install `ggiraph` with `install.packages("ggiraph")`.
+
+```{r packages}
+library(tidyverse)
+library(ggplot2)
+library(ggiraph)
+```
+
+<b>
+Do any interesting relationships exists between NFL combine metrics and
+draft position?
+</b>
+
+Below is data on every player who participated in the 2018 NFL draft combine
+or was drafted by an NFL team in 2018. Let's read in the data and set it as a
+tibble to make it easier to view. The argument `stringsAsFactors = FALSE`
+ensures variables such as `Player`, `Pos`, `School`, etc are read in as
+type character.
+
+```{r echo=FALSE}
+nfl <- read.csv("nfl_combine.csv", stringsAsFactors = FALSE)
+nfl <- as.tibble(nfl)
+nfl
+```
+
+- **Player**: player's name
+- **Pos**: player's position 
+- **School**: college of player
+- **Ht**: height in inches
+- **Wt**: weight in pounds
+- **Dash40**: forty yard dash time in seconds
+- **Vertical**: vertical jump in inches
+- **Bench**: number of bench press repititions at 225lbs
+- **Broad.Jump**: broad jump distance in inches
+- **Cone3**: 3 cone drill time in seconds
+- **Shuttle**: twenty yard shuttle time in seconds
+- **Team**: team that drafted the player
+- **Round**: round the player was drafted (0 means no round)
+- **Pick**: draft selection (0 means not drafted)
+
+
+# Investigation
+
+As you can see above, `nfl` contains a lot of missing values - represented by
+`NA`. Not all players participate in the NFL combine, and some who do
+participate do not perform each skills test. Also, undrafted players
+have `NA` values for their `Team`. Before we create visualizations let's
+try to better understand some of the data.
+
+## Exercises
+
+1. How many players went undrafted in the data set `nfl`?
+```{r}
+length(nfl$Player[nfl$Pick == 0])
+```
+2. Which player had the fastest 40 yard dash time? What was his time?
+```{r}
+nfl %>% 
+  filter(Dash40 == min(as.numeric(nfl$Dash40), na.rm=TRUE)) %>%
+  select(Player, Dash40)
+```
+3. How many players are in the data set for each position? *Hint*: `table()`
+```{r}
+nfl %>% 
+  group_by(Pos) %>% 
+  summarize(count = n())
+```
+4. What was the mean number of bench press repititions for all players listed
+   at the position of `DT`?
+```{r}
+nfl %>% 
+  filter(Pos == "DT") %>% 
+  summarize(mean_bench = mean(Bench, na.rm=TRUE))
+```
+5. Which team drafted the most players in 2018?
+```{r}
+nfl %>% 
+  filter(Pick != 0) %>% 
+  group_by(Team) %>%
+  summarize(count = n()) %>% 
+  filter(count == max(count))
+```
+# Visualizations with ggplot
+
+## Exercises {.tabset .tabset-fade .tabset-pills}
+
+Recreate plots 1 - 5. Add comments to the code that generated plots 6 and 7 to explain what is being done in those plots.
+Use the available hints before looking at the solution.
+Comment on any interesting trends/relationships you observe.
+
+### Plot 1 { - .tabset .tabset-fade .tabset-pills}
+
+#### Plot {-}
+
+```{r plot1, echo=FALSE, cache=TRUE}
+ggplot(data=nfl, aes(x = nfl$Wt, y= nfl$Dash40)) +geom_point(aes(color = Pos)) + geom_smooth(se = FALSE)
+```
+
+
+### Plot 2 { - .tabset .tabset-fade .tabset-pills}
+
+#### Plot {-}
+
+```{r plot2, echo=FALSE, cache=TRUE}
+ggplot(nfl,mapping = aes(x = as.factor(Round), y = Dash40))+geom_boxplot(fill = "purple") + labs(subtitle = "Round 0 means player went undrafted")
+```
+### Plot 3 { - .tabset .tabset-fade .tabset-pills}
+
+#### Plot {-}
+
+```{r plot3, echo=FALSE, cache=TRUE}
+nfl.plot2 <- subset(nfl, subset = (Pick > 0) & Pos == "WR" & Dash40 > 0)
+nfl.plot2 <- nfl.plot2[order(-nfl.plot2$Dash40),]
+ggplot(data=nfl.plot2, mapping = aes(Player, y = Dash40 -4)) + geom_bar(stat = "identity", color = "black", fill = "purple") + scale_y_continuous(breaks = seq(0, 1, .1), labels = seq(4, 5, .1)) + coord_flip()
+##Will not flip order
+```
+
+#### Hints {-}
+
+- subset `nfl` to create a data frame with only WR who were drafted
+- colors used: purple, black
+- `stat = "identity"` in `geom_bar()`
+- flip coordinates
+- `scale_y_continuous(breaks = seq(0, 1, .1), labels = seq(4, 5, .1))`
+- to sort the bars use `reorder(Player, -Dash40)`
+
+
+
+
+### Plot 4 { - .tabset .tabset-fade .tabset-pills}
+
+#### Plot {-}
+
+```{r plot4, echo=FALSE, cache=TRUE}
+ggplot(data=nfl, mapping=aes(x=Wt)) +
+  geom_histogram(color="black", fill="darkgreen", binwidth=5) +
+  labs(x="Weight (lbs)", y="Frequency", 
+       title="Distribution of player weights in 2018 draft class")
+```
+
+#### Hints {-}
+
+- `geom_histogram`
+- colors used: darkgreen, black
+- `binwidth = 5`
+
+
+### Plot 5 { - .tabset .tabset-fade .tabset-pills}
+
+#### Plot {-}
+
+```{r plot5, echo=FALSE, cache=TRUE}
+nfl.plot4 <- nfl %>% subset((Pos == 'CB' | Pos == 'RB' | Pos == 'S' | Pos == 'TE' | Pos == 'WR') & Round !=0)
+
+ggplot(data = nfl.plot4, mapping = aes(x = Wt, y = Dash40)) +
+  geom_point(aes(size = (Round), fill = Pos), color = 'Black', shape = 21) + 
+  theme_bw() + 
+  guides(fill = guide_legend(override.aes = list(size=10))) + guides(size = guide_legend(override.aes = list(fill = "Black", color = "Black"))) + labs(x = "Weight (lbs)", y = "40 yd dash time (sec)", title = "Player speed and weight", size = "Round drafted", color = "Position")
+```
+
+#### Hints {-}
+
+- subset `nfl` to only include the positions of CB, S, RB, WR, and TE for
+  players that were drafted
+- color used: black
+- `shape = 21`
+- `scale_size(range=c(10, 3))`
+- `theme_bw()`
+
+
+
+
+### Plot 6  { - .tabset .tabset-fade .tabset-pills}
+
+#### Plot {-}
+
+```{r plot6, echo=FALSE, cache=TRUE}
+nfl.speed <- nfl
+
+nfl.speed$detail <- paste(nfl.speed$Player, 
+                          paste(nfl.speed$School, nfl.speed$Pick, sep = ", "), 
+                          sep = "\n ")
+
+ploti <- ggplot(data = nfl.speed, mapping = aes(x = (Wt), y = Dash40)) +
+  geom_point_interactive(mapping = aes(fill = Pos, 
+                                       size = Round, 
+                                       tooltip = detail),
+                         color = "black", shape = 21) + 
+  scale_size(range=c(10, 3)) +
+  labs(x = "Weight (lbs)", y = "40 yd dash time (sec)", size = "Round drafted",
+       fill = "Position", title = "Player speed and weight",
+       caption = "Tooltip shows player's name, school, and overall draft selection") +
+  theme_bw() +
+  guides(fill = guide_legend(override.aes = list(size=10))) +
+  guides(size = guide_legend(override.aes = list(fill = "black", color="black")))
+girafe(code = print(ploti))
+```
+
+
+### Plot 7 { - .tabset .tabset-fade .tabset-pills}
+
+#### Plot {-}
+
+```{r plot7, echo=FALSE, cache=TRUE}
+ploti2 <- ggplot(data = nfl.speed, mapping = aes(x = (Wt), y = Dash40)) +
+  geom_point_interactive(mapping = aes(fill = Pos, 
+                                       size = Round, 
+                                       tooltip = detail,
+                                       data_id = Round), 
+                         color = "black", shape = 21) + 
+  scale_size(range=c(10, 3)) +
+  labs(x = "Weight (lbs)", y = "40 yd dash time (sec)", size = "Round drafted",
+       fill = "Position", title = "Player speed and weight",
+       caption = "Tooltip shows player's name, school, and overall draft selection") +
+  theme_bw() +
+  guides(fill = guide_legend(override.aes = list(size=10))) +
+  guides(size = guide_legend(override.aes = list(fill = "black", color="black")))
+plot.girafe <- girafe(code = print(ploti2))
+girafe_options(plot.girafe, opts_hover(css = "fill:black;") )
+
+
+```
+
+
+
+# Data know hows
+
+In this section, we will get some practice reading
+in data sets and working with the apply function.
+
+## Read data
+
+Data may be
+
+1. available in base R or through an R package such as the `diamonds` data set
+that is available through `tidyverse`;
+
+2. read in to R from a file on your computer;
+
+3. read in to R directly from a website;
+
+4. scraped from a website.
+
+Today we will get practice with examples that involve 2 and 3. 
+Some of the most popular R functions to accomplish this are
+
+- `read.table()`
+
+- `read.csv()`
+
+- `load()`
+
+### Exercises
+
+Read in the following data sets and save them as a well-named R object. A
+preview of each data set is given below for you to check your answer. Make
+sure all variable types are the same, headers are available when applicable,
+and `NA` values appear where appropriate.
+
+1. `nevada_casino_sqft.csv` (available on D2L)
+
+```{r echo=FALSE}
+head(read.csv("nevada_casino_sqft.csv", na.strings = ""))
+```
+
+2. `nevada_casino_sqft.csv` 
+  (available at: http://www.stat.ufl.edu/~winner/data/nevada_casino_sqft.csv)
+    
+```{r echo=FALSE}
+head(read.csv("http://www.stat.ufl.edu/~winner/data/nevada_casino_sqft.csv",
+         stringsAsFactors = FALSE))
+```
+
+3. `qqq.tsv` (available on D2L)
+
+```{r echo=FALSE}
+head(read.table("qqq.tsv", header = TRUE, sep = "\t"))
+```
+
+4. `spy.txt` (available on D2L)
+
+```{r echo=FALSE}
+head(read.table("spy.txt", header = FALSE, sep = "@"))
+```
+
+
+## Apply
+
+### Matrix examples
+
+The examples below can also be applied to data frames
+
+```{r matrix-examples, eval=FALSE}
+# create a 3 x 3 matrix
+my.matrix <- matrix(data = c(3, 5, 10, -1, 0, 2, 18, 5, -3),
+                    nrow = 3, ncol = 3)
+
+# matrix is filled column-wise, view matrix
+my.matrix
+
+# by columns
+apply(X = my.matrix, MARGIN = 2, FUN = mean)
+apply(X = my.matrix, MARGIN = 2, FUN = max)
+
+# by rows
+apply(X = my.matrix, MARGIN = 1, FUN = sd)
+apply(X = my.matrix, MARGIN = 1, FUN = which.max)
+apply(X = my.matrix, MARGIN = 1, FUN = sort)
+```
+
+1. Create a 4 x 3 matrix and the have the data filled in by rows. 
+```{r}
+matrix3x4 <- matrix(data=c(1,2,3,4,5,6,7,8,9,10,11,12), 
+                    nrow=4, ncol=3, byrow=TRUE)
+
+matrix3x4
+```
+2. Explain what the which.max function is doing.
+
+#Returns the index of the maximum of a vector. In this case, it returns the index
+of the max of each row.
+
+### Array examples
+
+```{r array-examples, eval=FALSE}
+# create a 2 x 2 x 3 array that contains the numbers 1 - 12
+my.array <- array(data = c(1:12), dim = c(2,2,3))
+
+# view the array
+my.array
+
+# apply sum over 1 dimension
+apply(my.array, 1, sum)
+apply(my.array, 2, sum)
+apply(my.array, 3, sum)
+
+# apply sum over multiple dimensions
+apply(my.array, c(1,2), sum)
+apply(my.array, c(1,3), sum)
+apply(my.array, c(2,3), sum)
+apply(my.array, c(3,1), sum)
+apply(my.array, c(3,2), sum)
+```
+
+## Further details
+
+A summary of the `a,l,s,t apply` functions
+
+Command | Description
+--------|--------------------------------------------------------------
+`apply(X, MARGIN, FUN, ...)` | Obtain a vector/array/list by applying `FUN` along the specified `MARGIN` of an array or matrix `X`
+`lapply(X, FUN, ...)` | Obtain a list by applying `FUN` to the elements of a list `X`
+`sapply(X, FUN, ...)` | Simplified version of `lapply`.  Returns a vector/array instead of list.
+`tapply(X, INDEX, FUN, ...)` | Obtain a table by applying `FUN` to each combination of the factors given in `INDEX`  
+
+- The above functions are good alternatives to loops
+
+- They are typically more efficient than loops (often run considerably 
+faster on large data sets)
+
+- They take practice to get used to, but make analysis easier to debug and 
+less prone to error when used effectively
+
+- Look at the Help's examples
+
+# References
+
+1. https://www.pro-football-reference.com/draft/2018-combine.htm
+2. http://r-statistics.co/Top50-Ggplot2-Visualizations-MasterList-R-Code.htm
+3. http://www.ggplot2-exts.org/ggiraph.html
+4. https://davidgohel.github.io/ggiraph/articles/offcran/using_ggiraph.html
+
+
+

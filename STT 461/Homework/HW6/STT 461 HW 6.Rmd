@@ -1,0 +1,140 @@
+---
+title: "STT 461 HW 6"
+author: "Derien Weatherspoon"
+date: "2023-04-05"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(broom)
+library(stats)
+library(ggplot2)
+library(MASS)
+```
+
+
+
+## Question 1
+
+Take the function(x, y, z) = x^2 - 3x + y^4 - 3y + z^2 + 10z + cos(cyz). Find the location of the minimum value. Use c(0,0,0) as the initialization location. Try different initialization locations. Can you find the different locations for minima? If you see multiple ones, which one seems to be a global minimum?
+
+```{r Question 1}
+q1func <- function(xyz) {
+  x <- xyz[1]
+  y <- xyz[2]
+  z <- xyz[3]
+  return(x^2 - 3*x + y^4 - 3*y + z^2 + 10*z + cos(x*y*z))
+}
+x0 <- c(0, 0, 0)
+
+result <- optim(x0, q1func)
+min <- result$par
+min
+
+# Try different initialization locations
+x1 <- c(1, 1, 1)
+result1 <- optim(x1, q1func)
+print(result1$par)
+
+x2 <- c(-1, -1, -1)
+result2 <- optim(x2, q1func)
+print(result2$minimum)
+
+```
+Global minimum at the coordinates given from the code.
+
+## Question 2
+
+The beta distribution on the interval 0 < x < 1... probability density: p(x) = *dbeta(x, alpha, beta)*
+
+a) Take the sample data in d2l called beta_samp.csv. Construct the log-likelihood function using dbeta.
+
+```{r 2a}
+beta <- read.csv("beta_samp.csv")
+log_likelihood <- function(params) {
+  a <- params[1] 
+  b <- params[2] 
+  log_likelihoods <- dbeta(beta$sample, a, b, log = TRUE)
+  all_log_likelihood <- sum(log_likelihoods)
+  return(-all_log_likelihood)
+}
+
+```
+b) Use the optim function to find the MLE for the parameters.
+
+```{r 2b, message=FALSE, warning=FALSE}
+params <- c(100, 90) 
+result <- optim(params, log_likelihood)
+estimated_params <- result$par
+estimated_params
+```
+
+c) Graph the beta distribution for the given parameters between 0 < x < 1.
+
+```{r 2c}
+
+alpha <- estimated_params[1]
+beta <- estimated_params[2] 
+x <- seq(0, 1, by = 0.01)
+pdf <- dbeta(x, alpha, beta)
+dat <- data.frame(x = x, pdf = pdf)
+ggplot(dat, aes(x = x, y = pdf)) +
+  geom_line() +
+  labs(title = "Beta Distribution",
+       x = "x",
+       y = "PDF")
+```
+
+## Question 3
+
+Referring back to problem 2 on homework 5, with the Boston dataset, redo the linear regressions in the following ways:
+
+a) Construct a linear model with the variable with the strongest correlation, like previously, but this time do the minimization of RMSE directly, with the optim function. Check to make sure the result matches what you got in the previous homework.
+
+```{r 3a}
+df <- read.csv("boston.csv")
+
+# Create a linear model with the variable with the strongest correlation
+model <- lm(medv ~ lstat, data = df)
+
+# Use the optim function to minimize RMSE
+optim_model <- optim(par = coef(model), fn = function(x) {
+  pred <- predict(model, newdata = df)
+  rmse <- sqrt(mean((df$medv - pred)^2))
+  return(rmse)
+})
+optim_model
+```
+RMSE of 6.20, I believe this is the same as before.
+
+
+b) Next construct a linear model of the same form, with mean absolute error as the loss function. Plot the regression lines and compare the model with what you did in the previous part.
+
+```{r 3b}
+mean_absolute_error <- function(beta) {
+  predicted <- beta[1] + beta[2] * df$lstat
+  residuals <- predicted - df$medv
+  mean_absolute_error <- mean(abs(residuals))
+  return(mean_absolute_error)
+}
+init_beta <- c(0, 0)
+result <- optim(init_beta, mean_absolute_error)
+intercept <- result$par[1]
+slope <- result$par[2]
+predicted <- intercept + slope * df$lstat
+data <- data.frame(x = df$lstat, y = df$medv, predicted = predicted)
+ggplot(data, aes(x = x, y = y)) +
+  geom_point() +
+  geom_line(aes(y = predicted)) +
+  labs(title = "Linear Regression with mean absolute error loss",
+       x = "lstat",
+       y = "MEDV")
+```
+

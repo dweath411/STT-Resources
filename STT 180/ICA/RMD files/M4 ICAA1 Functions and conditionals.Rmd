@@ -1,0 +1,322 @@
+---
+title: "Functions and conditionals"
+author: "Derien W Group 3"
+date: "M4 ICA1"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    number_sections: no
+    df_print: paged
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+---
+
+<style type="text/css">
+/* Title */
+h1.title {
+  color: #1D5D53;
+  font-weight: bold;
+}
+/* Level 1 header */
+h1 {
+  color: #1D5D53;
+}
+/* Level 2 header */
+h2 {
+  color: #1D5D53;
+}
+/* Table of contents */
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    z-index: 2;
+    color: #fff;
+    background-color: #1D5D53;
+    border-color: #337ab7;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      message = FALSE, 
+                      warning = FALSE,
+                      comment = NA)
+```
+
+# Introduction
+
+Today you will get some practice writing functions. Load package `tidyverse`.
+
+```{r packages, echo=T}
+library(tidyverse)
+```
+
+Below is a template for how R functions are structured. The three main 
+components are
+
+  - **name**, a short informative verb;
+  - **arguments**, inputs to the function;
+  - **body**, code to be executed.
+
+```{r function-template, eval=F, echo=T}
+my_fcn_name <- function(arg_1, arg_2, arg_3) {
+  # body
+  # of
+  # the
+  # function
+  # goes
+  # here
+  return(r_object) # object to return
+}
+```
+
+# Creating `viewr()` function
+
+Your goal is to create a function called `viewr()` that will take
+a data frame as its data input and return a randomly specified number of rows
+and specified number of columns.
+
+The following two functions will be useful in your development of 
+`viewr()`.
+
+#### `dim()`
+
+Function `dim()` retrieves the dimension of an object. For example,
+
+```{r dim-example, eval=F, echo=T}
+dim(mtcars)
+dim(diamonds)
+```
+
+gives the number of rows and columns of the data frames `mtcars` and `diamonds`
+as a vector of length two.
+
+#### `sample_n()`
+
+Function `sample_n()` is a function in package `dplyr` that randomly selects
+rows from a data frame. For example
+
+```{r sample_n-example, eval=F, echo=T}
+mtcars %>% 
+  sample_n(size = 5)
+```
+
+randomly selects five rows from `mtcars`.
+
+## Step 1
+
+The first step in building any function is to get your code working before
+turning it into a function.
+
+1. Use a sequence of `dplyr` functions to select the first 3 columns 
+   of `diamonds` and randomly pick 7 rows.
+   
+```{r step-1-1}
+diamonds %>% 
+  select(colnames(diamonds)[1:3]) %>% 
+  sample_n(size=7)
+```
+   
+   
+2. Modify your above sequence to select all the columns and randomly pick 20
+   rows.
+   
+```{r step-1-2}
+sample_n(diamonds, 20)
+```
+ 
+
+## Step 2
+
+Use your code in Step 1 as a template to create a function named 
+`viewr_1()`. The function should have three arguments:
+
+- `df`: will take a data frame as its input
+- `nrow`: will take a positive integer as its input
+- `ncol`: will take a positive integer as its input
+
+The function will return part of the data frame provided as an input, but with a
+randomly chosen number of rows specified by `nrow` and the first `ncol` columns
+as specified.
+
+```{r step-2}
+# viewr_1 function
+viewr_1 <- function(df, nrow, ncol) {
+  df %>% 
+    select(colnames(diamonds)[1:ncol]) %>% 
+    sample_n(size=nrow)
+}
+```
+
+After you write your function, test your function with the following calls:
+
+```{r viewr-test-step-2, eval = F, echo = T}
+viewr_1(df = diamonds, nrow = 4, ncol = 3)
+viewr_1(df = diamonds, nrow = 10, ncol = 10)
+viewr_1(df = diamonds, nrow = 10, ncol = 11)
+```
+
+You should have received an error when you ran the third line. Data set
+`diamonds` only has 10 variables, so it cannot select 11 columns. You will
+fix this in step 3.
+ 
+
+## Step 3
+
+Modify `viewr_1()` to include an if-else statement. If `ncol` does not exceed
+the number of columns in the data frame, then the function should run as
+normal. Otherwise, the function should output a message with
+`cat("The data frame does not have that many columns!")`. Call this new
+function `viewr_2()`
+
+```{r step-3}
+# viewr_2 function
+viewr_2 <- function(df, nrow, ncol) {
+  if(ncol > dim(df)[2]){
+    cat("The data frame does not have that many columns!")
+  } else {
+    df %>% 
+      select(colnames(diamonds)[1:ncol]) %>% 
+      sample_n(size=nrow)
+  }
+}
+```
+
+Test `viewr_2()` with the following calls:
+
+```{r viewr-test-step-3, eval = F, echo = T}
+viewr_2(df = diamonds, nrow = 4, ncol = 3)
+viewr_2(df = diamonds, nrow = 10, ncol = 10)
+viewr_2(df = diamonds, nrow = 10, ncol = 11)
+viewr_2(df = diamonds, nrow = 10000000, ncol = 3)
+```
+
+You should have received an error when you ran the fourth line. Data set
+`diamonds` does not have 10000000 rows. To fix this, proceed to Step 4.
+ 
+
+## Step 4
+
+Modify `viewr_1()` to include a stop-if-not statement with function
+`stopifnot()`. Call this new function `viewr().` 
+If any of the expressions are not all true, stop is called, 
+producing an error message indicating the first expression which was 
+not true. Separate conditions with a comma. Below is an example.
+
+```{r stopifnot-ex, eval=F, echo=T}
+ranger <- function(x){
+  # check if x is a numeric vector of length at least 2
+  stopifnot(is.numeric(x), length(x)>=2)
+  value <- max(x) - min(x)
+  return(value)
+}
+
+# function test
+ranger(x = 1:10)
+ranger(x = 3)
+ranger(x = letters)
+```
+
+Using `stopifnot()` is more convenient than including multiple if-else
+statements.
+
+```{r step-4}
+# viewr function
+viewr <- function(df, nrow, ncol) {
+  stopifnot(ncol <= dim(df)[2], nrow <= dim(df)[1])
+  df %>% 
+    select(colnames(diamonds)[1:ncol]) %>% 
+    sample_n(size=nrow)
+}
+```
+
+Test `viewr()` with the following calls:
+
+```{r viewr-test-step-4, eval = F, echo = T}
+viewr(df = diamonds, nrow = 4, ncol = 3)
+viewr(df = diamonds, nrow = 10, ncol = 11)
+viewr(df = diamonds, nrow = 10000000, ncol = 3)
+```
+
+# Creating `summary()` function
+
+Create a function which will take a vector as an input and calculate the sum and mean of the vector. The function should return the sum, the average and a message stating whether the sum/mean is positive or negative.
+
+```{r summary-fcn}
+summary <- function(vect) {
+  summation <- sum(vect)
+  average <- mean(vect)
+  message <- ""
+  if (summation/average >= 0){
+    message <- "sum/mean is +"
+  }else {
+    message <- "sum/mean is -"
+  }
+  return(c(sum(vect), mean(vect), message))
+}
+```
+# Creating `limit_e()`function
+
+Create a function called `limit_e()` that takes one argument, `n`. Argument
+`n` shoud be a vector of integers greater than zero. Function `limit_e()` will
+compute and return the evaluated quantity <br>
+$$\bigg(1 + \frac{1}{n}\bigg)^n.$$
+<br>
+From calculus you know that the mathematical constant $e$ is defined as
+<br>
+$$e = \lim_{n \to \infty}\bigg(1 + \frac{1}{n}\bigg)^n.$$
+<br>
+
+```{r limit-e-fcn}
+# limit_e function
+limit_e <- function(n) {
+  output <- (1+1/n)^n
+  return(output)
+}
+```
+
+After you write your function, test it with the following function calls.
+What do you notice happens? Why is the happening?
+
+```{r e-test, eval = F, echo = T}
+limit_e(100)
+limit_e(1000000)
+limit_e(c(1, 1000000, 100000000000))
+limit_e(c(1, 1000000, 1000000000000000000))
+```
+
+## Computer arithmetic
+
+R, as does most software, uses floating point arithmetic, which is not 
+the same as the arithmetic we learn. Computers cannot represent all 
+numbers exactly. 
+
+For your mind to be blown, run the following examples.
+
+```{r cpu-arithmetic, eval=F, echo=T}
+# example 1
+0.2 == 0.6 / 3
+
+# example 2
+point3 <- c(0.3, 0.4 - 0.1, 0.5 - 0.2, 0.6 - 0.3, 0.7 - 0.4)
+point3
+
+point3 == 0.3
+```
+
+To work around these issues, use `all.equal()` for checking the equality of
+two numeric quantities in R.
+
+```{r cpu-arithmetic2, eval=F, echo=T}
+# example 1, all.equal()
+all.equal(0.2, 0.6 / 3)
+
+# example 2, all.equal()
+point3 <- c(0.3, 0.4 - 0.1, 0.5 - 0.2, 0.6 - 0.3, 0.7 - 0.4)
+point3
+
+all.equal(point3, rep(.3, length(point3)))
+```
+
+

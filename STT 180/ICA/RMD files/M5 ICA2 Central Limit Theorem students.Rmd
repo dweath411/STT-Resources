@@ -1,0 +1,188 @@
+---
+title: "Central Limit Theorem"
+author: "Derien W - 3"
+date: "M5 ICA2"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    number_sections: no
+    df_print: paged
+---
+
+<style type="text/css">
+/* Title */
+h1.title {
+  color: #3A2C29;
+  font-size:60px;
+  font-weight: bold;
+}
+/* Level 1 header */
+h1 {
+  color: #3A2C29;
+}
+/* Level 2 header */
+h2 {
+  color: #C9C675;
+}
+/* Level 3 header */
+h3 {
+  color: #C9C675;
+}
+/* Table of contents */
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    z-index: 3;
+    color: #fff;
+    background-color: #C9C675;
+    border-color: #337ab7;
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      error = TRUE,
+                      message = FALSE, 
+                      warning = FALSE,
+                      comment = NA)
+set.seed(3142019)
+```
+
+Load the required packages.
+
+```{r}
+library(tidyverse)
+library(statsr)
+```
+	
+### Question 1
+
+Load a data set `nc` which contain information on births recorded in the state of North Carolina. Plot the histograms for the variables `weight`, `premie` and `weeks`
+
+```{r the data, echo = FALSE}
+glimpse(nc)
+```
+
+```{r histograms, echo=FALSE}
+hist(nc$weeks)
+hist(as.numeric(nc$premie))
+hist(nc$weight)
+data.frame(Variables=c('Weight', 'Premature weeks', 'Weeks'), 
+Average=c(mean(nc$weight, na.rm=TRUE), mean(as.numeric(nc$premie), na.rm=TRUE), mean(nc$weeks, na.rm=TRUE)), 
+StandardDeviation = c(sd(nc$weight, na.rm=TRUE), sd(as.numeric(nc$premie), na.rm=TRUE), sd(nc$weeks, na.rm=TRUE)))
+```
+**Comment on the distribution of the histograms.**
+## One is slightly skewed, one is evenly distributed, one is just very unproportionate.
+###	Question 2
+
+Let us take into consideration the variable `weight`. Take repeated sample (5000 samples) of size 5,25,100 and find the average `weight` for each sample. Thus write a for-loop to sample $\bar{x}$ for n = 5, 25, 100 where $\bar{x}$ is the average weight.
+
+```{r echo=FALSE}
+n_vals = c(5, 25, 100)
+mean_weights = list()
+for (i in 1:3){
+  mean_weights[[i]] = replicate(n=5000, expr=mean(sample(x=nc$weight, size=n_vals[i]), na.rm=TRUE))
+}
+```
+
+###	Question 3
+
+Let us take into consideration the variable `premie`. We will take 5000 repeated samples and find the average `premie`. Thus write a for-loop to sample $\hat{p}$ for n = 3,25,100 where $\hat{p}$ is the proportion of premature births.Write a for-loop to sample $\hat{p}$ for n = 3, 25, 100
+
+```{r echo=FALSE}
+n_vals = c(3, 25, 100)
+mean_premie = list()
+for (i in 1:3){
+  mean_premie[[i]] = replicate(n=5000, expr=mean(sample(x=as.numeric(nc$premie), size=n_vals[i]), na.rm=TRUE))
+}
+```
+
+###	Question 4
+
+Plot the histogram of the variable `weeks` and comment on the shape, skewness of the plot.
+Take repeated sample (5000 samples) of size 5 and find the average `weight` $\bar{x}_{sk}$ for each sample. Thus write a for-loop to sample $\bar{x}_{sk}$ for n = 5.
+
+```{r echo=FALSE}
+hist(nc$weeks)
+n_vals = c(5)
+mean_weeks = list()
+for (i in 1:length(n_vals)){
+  mean_weeks[[i]] = replicate(n=5000, expr=mean(sample(x=nc$weeks, size=n_vals[i]), na.rm=TRUE))
+}
+```
+
+### Question 5
+
+Plot the histograms for Questions 2-4. 
+
+```{r histograms_mean, echo=FALSE}
+mean_weights.df <- data.frame(n5=mean_weights[[1]], n25=mean_weights[[2]], n100=mean_weights[[3]])
+p1 <- ggplot(mean_weights.df, aes(n5)) + geom_histogram() + labs(x="Average Weight", y="Frequency", title="Distribution of average weight (n=5)")
+p2 <- ggplot(mean_weights.df, aes(n25)) + geom_histogram() + labs(x="Average Weight", y="Frequency", title="Distribution of average weight (n=25)")
+p3 <- ggplot(mean_weights.df, aes(n100)) + geom_histogram() + labs(x="Average Weight", y="Frequency", title="Distribution of average weight (n=100)")
+
+grid.arrange(p1, p2, p3, nrow=1)
+```
+
+
+```{r histogram_prop, echo=FALSE}
+mean_premie.df <- data.frame(n3=mean_premie[[1]], n25=mean_premie[[2]], n100=mean_premie[[3]])
+
+p1 <- ggplot(mean_premie.df, aes(n3)) + geom_histogram() + labs(x="Proportion of Premie Births", y="Frequency", title="Distribution of average premie births (n=3)")
+p2 <- ggplot(mean_premie.df, aes(n25)) + geom_histogram() + labs(x="Proportion of Premie Births", y="Frequency", title="Distribution of average premie births (n=25)")
+p3 <- ggplot(mean_premie.df, aes(n100)) + geom_histogram() + labs(x="Proportion of Premie Births", y="Frequency", title="Distribution of average premie births (n=100)")
+
+grid.arrange(p1, p2, p3, nrow=1)
+```
+ 
+```{r histogram_sk, echo=FALSE}
+mean_weeks.df <- data.frame(n5=mean_weeks[[1]])
+
+ggplot(mean_weeks.df, aes(n5)) + geom_histogram() + labs(x="Average Weeks", y="Frequency", title="Distribution of average weeks (n=5)")
+```
+ 
+ 
+### Question 6 
+
+Comment on the similarities or disimilarities of the histograms. (1-3 sentences)
+ ## More samples = more normal distribution
+ 
+### Question 7
+
+    If you alter the for-loop in Question 4 to sample n= 50 rather than n = 5, does the updated histogram better match those from 2 & 3?
+
+```{r histogram_50, echo=FALSE}
+n_vals = c(50)
+mean_weeks = list()
+for (i in 1:length(n_vals)){
+  mean_weeks[[i]] = replicate(n=5000, expr=mean(sample(x=nc$weeks, size=n_vals[i]), na.rm=TRUE))
+}
+
+mean_weeks.df <- data.frame(n5=mean_weeks[[1]])
+
+ggplot(mean_weeks.df, aes(n5)) + geom_histogram() + labs(x="Average Weeks", y="Frequency", title="Distribution of average weeks (n=5)")
+```
+
+
+### Question 8
+
+From the results in the previous section what can you conclude  about the distribution of the sample mean, $\bar{x}$ and sample proportion, $\hat{p}$? 
+## Can conclude that the distributions aon't always be the same for sample mean and sample proportion
+
+### Question 9 
+
+Comment on the center and spread of the distributions of the sample statistics based on the histograms in Question 5? 
+The distributions vary on skewness, not every one of them has a normal distribution.
+**Sample mean:**
+
+**Sample proportion:**
+
+
+### Conclusion
+
+Thus, we saw that the Central Limit Theorem guarantees normality under one of two assumptions: normality or approx. normality with sufficient sample size. The distribution of the sample statistic is called the sampling distribution. 
+
+These concept are the key underlying concepts in inference when we will be testing a hypothesized value of the population mean or the population proportion based on the random sample or when we will be developing confidence interval for the population mean or the population proportion

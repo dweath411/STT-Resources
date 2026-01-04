@@ -1,0 +1,853 @@
+---
+title: "STT 481 PROJECT"
+author: "Derien Weatherspoon"
+date: "2023-03-22"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Project Overview and Goals
+
+Goal: Predict the sales price for each house. For each Id in the test set, you must predict the value of the SalePrice variable. So, **SalePrice** is the **Response** variable.
+
+Metric: Submissions are evaluated on Root-Mean-Squared-Error (RMSE) between the logarithm of the predicted value and the logarithm of the observed sales price. (Taking logs means that errors in predicting expensive houses and cheap houses will affect the result equally.)
+
+Evaluation: Class evaluation is based on the following methodologies: KNN Methods, Linear Regression, Subset Selection, Shrinkage Methods, Generalized Additive Models, Regression Trees, Bagging, Random Forest, and Boosting methods. Extracted from these models will be the Estimated Test Errors (CV Estimate) and True Test Errors.
+
+# Introduce the Data
+
+The data set used for this project is the Ames(Iowa) Housing Data. The unprocessed data set includes 79 explanatory variables describing (almost) every aspect of residential homes in Ames, Iowa.
+
+## Loading Packages
+
+```{r packages, message=FALSE}
+library(FNN)
+library(class)
+library(dplyr)
+library(MASS)
+library(corrplot)
+library(ggcorrplot)
+library(ggplot2)
+library(glmnet)
+library(gpairs)
+library(leaps)
+library(boot)
+library(tree)
+library(gbm)
+library(splines)
+library(gam)
+library(randomForest)
+library(car)
+library(rpart)
+library(rpart.plot)
+```
+
+
+# Exploratory Data Analysis 
+
+I am using the pre-processed data, which is an already cleaned data set, that has 24 columns, and around 2900 rows combined.
+
+## Load Preprocessed Data
+```{r Load data}
+train <- read.csv("train_new.csv")
+test <- read.csv("test_new.csv")
+index <- rbind(train,test) # for KNN method
+```
+
+Because this data is already processed, I will not be doing any cleaning or checking of NAs. Creating a combination of the 2 datasets just in case.
+
+## Data dimensions and structure
+```{r Dimensions and Structure}
+dim(train)
+dim(test)
+dim(index)
+```
+The pre-processed data has a lot of columns removed. 
+
+## Glimpse on data 
+
+```{r glimpse on train}
+glimpse(train)
+```
+```{r glimpse on test}
+glimpse(test)
+```
+
+Some data types vary from train and test. Such as SalePrice and GarageCars variables. Notice how SalePrice in the testing set is all zeros.
+
+## Show the distribution of SalePrice
+```{r Distribution of SalePrice}
+hist(x = train$SalePrice, main = "Distribution of SalePrice",
+     xlab = "Sale Price", ylab = "Frequency of Sale Price", col = "darkorange")
+```
+The distribution of the housing prices looks to have the highest frequency around 130,000 to 180,000 dollars.
+
+## Correlation of all variables
+```{r Correlation}
+ggcorrplot(cor(train), lab_size = 1.5, tl.cex = 5, lab = T,
+           title = "Correlation heatmap",  hc.order = TRUE)  
+#correlation heatmap
+
+round(cor(train),
+  digits = 2 # rounded to 2 decimals
+)
+```
+OverallQual seems to have strongest correlation with SalePrice. 
+
+## Plotting year build vs sale price.
+As you see in today's market, older homes usually that are kept in good condition can be a bit pricier than newer homes, because it is seen as "vintage". So I want to see what happens between the two variables.
+```{r plot year built vs price, message=FALSE}
+ggplot(data = index[index$SalePrice > 0,], aes(x = YearBuilt, y = SalePrice)) +
+  geom_point() +
+  geom_smooth(method = NULL, se = T, colour = "blue", linetype = "solid") +
+  labs(x = "Year Built",
+       y = "Sale Price",
+       title = "Year Built vs. Sale Price"
+       )
+```
+# KNN Method
+
+## Indexing and Scaling
+```{r Index and Scale}
+index <- rbind(train, test) #binding train and test
+index.model <- scale(index) #scaled indexed data set 
+
+index.train.x <- index.model[1:nrow(train),]
+index.test.x <- index.model[-(1:nrow(train)),]
+```
+First, to use KNN method I have to bind the train and test data together so I can then scale it, creating an indexed training and test data set.
+
+## Find tuning parameter K and error rate
+
+```{r tuning parameter}
+set.seed(1)
+loocv.mse <- rep(0,10)
+counter <- 0
+for(k in 1:10){
+counter <- counter + 1 # counter for k
+cvknn <- knn.reg(index.train.x, NULL, train$SalePrice, k = k)
+## the little k here is the number of nearest neighbors not k-fold
+## X.train is the training input
+## y.train is the training output
+loocv.mse[counter] <- mean(cvknn$residuals^2)
+}
+plot(1:10, loocv.mse, type="b", xlab="K")
+which.min(loocv.mse) # gives us the K in which has the best error rate
+```
+
+LOOCV method tells me that K = 4 is the best K value to go with. So this is how why I choose the tuning parameter of K = 4
+
+## Perform prediction with the tuning parameter
+```{r KNN prediction}
+# Use K = 4, since the LOOCV method says K = 4. 
+knn.pred <- knn.reg(train = index.train.x, test = index.test.x, 
+                    y = train$SalePrice, k = 4)$pred
+knn.pred[1:25]
+```
+
+Show the first 25 predictions of the SalePrice. This looks accurate considering how much a home in Iowa would vary depending on the area.
+
+## KNN MSE 
+
+```{r knn mse}
+knn.error <- mean((knn.pred-test$SalePrice)^2)
+```
+
+# Linear Regression Analysis
+
+## Fit a linear regression model with all predictors
+```{r linear reg model}
+train.fit <- lm(SalePrice ~., data = train)
+summary(train.fit)
+```
+Plenty of variables that are significant with the response variable. Almost all of them have some significance.
+
+## Perform residual diagnostics
+```{r Residual Diagnostics}
+par(mfrow=c(2,2))
+plot(train.fit) 
+ncvTest(train.fit) # non-constant variance testing
+```
+There are visible outliers in the residual diagnostics. I will remove them for the next plot. NCV test to check for heteroscedasticity, the p-value is very low which means indicates some significance in the model.
+
+## Checking other remedy
+```{r Remedy model}
+train.fit_2 <- lm(log(SalePrice) ~., data = train[-c(524, 633, 1299),]) # removing the outliers
+summary(train.fit_2)
+par(mfrow=c(2,2))
+plot(train.fit_2)
+```
+The diagnostics look better, especially for the normal Q-Q graph. The remedy used is a log transformation for the SalePrice variable. Furthermore, removing outliers should decrease the error.
+
+## Explaining some significant coefficients from the linear model
+
+Some important variables worth noting (highly significant) are OverallQual, OverallCond, YearBuilt and LotArea. Obviously, these are all factors you would expect to be important in regards to housing prices. Interesting as well are BsmtFinSF1 and BsmtFinSF2, which do not share the same significance. Why could this be? 
+
+## Perform prediction
+```{r linear prediction}
+linear.pred <- exp(predict(train.fit_2, test))
+head(linear.pred)
+```
+Predicting a few housing prices given the data. I apply exp() to the predict function because I'm using a log transformation on train.fit_2.
+
+## Error Rate for Linear Regression
+```{r error for linear regression}
+set.seed(1)
+glm.train.fit_2 <- glm(log(SalePrice) ~., data = train)
+cv.glm.train.fit_2 <- cv.glm(train, glm.train.fit_2, K = 10)
+cvmse.linear <- cv.glm.train.fit_2$delta[2]
+cvmse.linear
+```
+0.02508612 is the cv error rate I get for Linear Regression. 
+
+```{r linear MSE}
+lin.error <- mean((linear.pred-test$SalePrice)^2)
+```
+
+```{r linear MSE decimal}
+mean((train.fit_2$residuals)^2)
+```
+
+
+# Subset Selection Method
+
+## Initial fitting
+
+```{r Subset fitting}
+subset.fit <- regsubsets(log(SalePrice) ~ ., data = train, nvmax = ncol(train))
+names(subset.fit)
+subsum <- summary(subset.fit)
+subsum$rsq
+```
+# Best Subset
+
+## Which subset selection method do you use? Best subset, forward stepwise, or backward stepwise? And explain why you choose this method.
+```{r Subset Selection}
+par(mfrow=c(2,2))
+plot(subsum$rss ,xlab="Number of Variables ", ylab="RSS", type="l")
+plot(subsum$adjr2 ,xlab="Number of Variables ", ylab="Adjusted RSq", type="l")
+print(c('Adjusted RSquared', which.max(subsum$adjr2)))
+points(11,subsum$adjr2[11], col = "red", cex = 2, pch = 20)
+plot(subsum$cp, xlab = "Number of Variables ", ylab = "Cp", type = "l")
+print(c('Cp',which.min(subsum$cp)))
+points(10,subsum$cp[10], col = "red", cex = 2, pch = 20)
+print(c('BIC',which.min(subsum$bic)))
+plot(subsum$bic, xlab = "Number of Variables ", ylab = "BIC", type = "l")
+points(6,subsum$bic[6], col = "red", cex = 2, pch = 20)
+```
+```{r subset.fit plotting}
+plot(subset.fit,scale="r2")
+plot(subset.fit,scale="adjr2")
+plot(subset.fit,scale="Cp")
+plot(subset.fit,scale="bic")
+```
+
+## Forward Stepwise
+
+```{r Forward Stepwise}
+fit.fwd <- regsubsets(log(SalePrice) ~., data = train, nvmax = ncol(train), method = "forward")
+par(mfrow=c(2,2))
+fit.fwd.summary <- summary(fit.fwd)
+plot(fit.fwd.summary$rss ,xlab="Number of Variables ", ylab="RSS", type="l")
+plot(fit.fwd.summary$adjr2 ,xlab="Number of Variables ", ylab="Adjusted RSq", type="l")
+print(c('Adjusted RSquared', which.max(fit.fwd.summary$adjr2)))
+points(11, fit.fwd.summary$adjr2[11], col = "red", cex = 2, pch = 20)
+plot(fit.fwd.summary$cp, xlab = "Number of Variables ", ylab = "Cp", type = "l")
+print(c('Cp', which.min(fit.fwd.summary$cp)))
+points(10,fit.fwd.summary$cp[10], col = "red", cex = 2, pch = 20)
+print(c('BIC', which.min(fit.fwd.summary$bic)))
+plot(fit.fwd.summary$bic, xlab = "Number of Variables ", ylab = "BIC", type = "l")
+points(6,fit.fwd.summary$bic[6], col = "red", cex = 2, pch = 20)
+```
+
+## Backward Stepwise
+
+```{r Backward Stepwise}
+fit.bwd <- regsubsets(log(SalePrice) ~., data = train, nvmax = ncol(train), method = "backward")
+par(mfrow=c(2,2))
+fit.bwd.summary <- summary(fit.bwd)
+plot(fit.bwd.summary$rss ,xlab="Number of Variables ", ylab="RSS", type="l")
+plot(fit.bwd.summary$adjr2 ,xlab="Number of Variables ", ylab="Adjusted RSq", type="l")
+print(c('Adjusted RSquared', which.max(fit.bwd.summary$adjr2)))
+points(11, fit.bwd.summary$adjr2[11], col = "red", cex = 2, pch = 20)
+plot(fit.bwd.summary$cp, xlab = "Number of Variables ", ylab = "Cp", type = "l")
+print(c('Cp', which.min(fit.bwd.summary$cp)))
+points(10,fit.bwd.summary$cp[10], col = "red", cex = 2, pch = 20)
+print(c('BIC', which.min(fit.bwd.summary$bic)))
+plot(fit.bwd.summary$bic, xlab = "Number of Variables ", ylab = "BIC", type = "l")
+points(6,fit.bwd.summary$bic[6], col = "red", cex = 2, pch = 20)
+```
+
+The forward and backward step selection plots are the same. This could be due to them picking the best variables for both selections. I will choose the best subset selection model though, since the number of variables is small.
+
+## Test Error for Subset Selection
+
+## Get initial function
+```{r predict subsets function}
+predict.regsubsets <- function (object, newdata , id, ...){
+  form <- as.formula(object$call[[2]])  # formula of null model
+  mat <- model.matrix(form, newdata)    # building an "X" matrix from newdata
+  coefi <- coef(object, id = id)        # coefficient estimates associated with the object model containing id non-zero variables
+  xvars <- names(coefi)            # names of the non-zero coefficient estimates
+  return(mat[,xvars] %*% coefi)    # X[,non-zero variables] %*% Coefficients[non-zero variables]
+}
+```
+
+### Perform cv on all selections
+```{r subset cv}
+set.seed(1)
+fold.index <- cut(sample(1:nrow(train[,-1])), breaks = 10, labels = F)
+
+cv.error.sub.fit <- rep(0, ncol(train[,-1]))
+cv.error.fwd.fit <- rep(0, ncol(train[,-1]))
+cv.error.bwd.fit <- rep(0, ncol(train[,-1]))
+
+for (i in 1:ncol(train[,-ncol(train)])) {
+  sub.error <- rep(0,10)
+  fwd.error <- rep(0,10)
+  bwd.error <- rep(0,10)
+  
+  for (k in 1:10){
+    train.f <- train[fold.index != k,]
+    test.f <- train[fold.index == k,]
+    true <- test.f[,"SalePrice"]
+    sub.fit <- regsubsets(log(SalePrice) ~., data = train.f, nvmax = ncol(train[,-1]))
+    fwd.fit <- regsubsets(log(SalePrice) ~., data = train.f, nvmax = ncol(train[,-1]), method='forward')
+    bwd.fit <- regsubsets(log(SalePrice) ~., data = train.f, nvmax = ncol(train[,-1]), method='backward')
+    sub.predictions <- exp(predict.regsubsets(sub.fit, test.f, id = i))
+    fwd.predictions <- exp(predict.regsubsets(fwd.fit, test.f, id = i))
+    bwd.predictions <- exp(predict.regsubsets(bwd.fit, test.f, id = i))
+    
+    sub.error[k] <- mean((sub.predictions - true)^2)
+    fwd.error[k] <- mean((fwd.predictions - true)^2)
+    bwd.error[k] <- mean((bwd.predictions - true)^2)
+  }
+  cv.error.sub.fit[i] <- mean(sub.error)
+  cv.error.fwd.fit[i] <- mean(fwd.error)
+  cv.error.bwd.fit[i] <- mean(bwd.error)
+}
+
+```
+
+## Subset Selection Errors
+```{r subset selection errors}
+print(c(cv.error.sub.fit, which.min(cv.error.sub.fit))) # Best Subset + Coefficient numbers
+print(c(cv.error.fwd.fit, which.min(cv.error.fwd.fit))) # Forward Stepwise + Coefficient numbers
+print(c(cv.error.bwd.fit, which.min(cv.error.bwd.fit))) # Backward Stepwise + Coefficient numbers
+```
+The minimum coefficient number for each of the three models is 1, leading me to believe all selection models are equally the same.
+
+## Plot each selection error 
+
+```{r best subset plot error}
+par(mfrow=c(1,1))
+plot(cv.error.sub.fit, type = "b")
+points(which.min(cv.error.sub.fit), cv.error.sub.fit[which.min(cv.error.sub.fit)], 
+       col = "darkgreen", cex = 3, pch = 20)
+```
+
+```{r forward stepwise plot error}
+par(mfrow=c(1,1))
+plot(cv.error.fwd.fit, type = "b")
+points(which.min(cv.error.fwd.fit), cv.error.fwd.fit[which.min(cv.error.fwd.fit)], 
+       col = "blue", cex = 3, pch = 20)
+```
+
+```{r backward stepwise selection error}
+par(mfrow=c(1,1))
+plot(cv.error.bwd.fit, type = "b")
+points(which.min(cv.error.bwd.fit), cv.error.bwd.fit[which.min(cv.error.bwd.fit)], 
+       col = "yellow", cex = 3, pch = 20)
+```
+
+Again, all the same. Each plot is showing the minimum coefficient value is 1, which is what my other data shows.
+
+## Which criterion do you use for selecting your model? Cp, BIC, Adjusted R-squared, or CV?  And explain why you choose this criterion.
+
+
+When selecting my model, I am taking the BIC into consideration most. This is because it takes in the least amount of variables to have a successful output.
+
+## Explain some of the coefficients in the models
+```{r selection coefficients}
+coef(subset.fit, which.min(cv.error.sub.fit)) 
+coef(fit.fwd, which.min(cv.error.fwd.fit))
+coef(fit.bwd, which.min(cv.error.bwd.fit))
+```
+In this case, I find the coefficients from all models because they are all selecting the same variable. It is interesting to note that the intercept for each model, they are all the same. 
+
+## Perform prediction
+
+```{r best subset predictions}
+subset.predictions <- exp(predict.regsubsets(subset.fit, newdata = test, id = which.min(cv.error.sub.fit)))
+head(sub.predictions)
+```
+
+```{r forward stepwise predictions}
+fwd.predictions <- exp(predict.regsubsets(subset.fit, newdata = test, id = which.min(cv.error.fwd.fit)))
+head(fwd.predictions)
+```
+
+```{r backward stepwise predictions}
+bwd.predictions <- exp(predict.regsubsets(subset.fit, newdata = test, id = which.min(cv.error.bwd.fit)))
+head(bwd.predictions)
+```
+
+The predictions for all are the same as expected, since all the models are the same too.
+
+
+## Stepwise Selection MSE's
+
+```{r stepwise mse}
+forward.error <- mean((fwd.predictions - test$SalePrice)^2)
+backward.error <- mean((bwd.predictions - test$SalePrice)^2)
+subset.error <- mean((subset.predictions - test$SalePrice)^2)
+```
+
+# Shrinkage Methods
+
+## Initial fitting 
+```{r Initial fitting}
+x.fit <- model.matrix(log(SalePrice) ~., data = train)[,-1]
+head(x.fit)
+trsp <- log(train$SalePrice) # make the response variable 
+```
+## Tuning parameters for Ridge and Lasso
+
+To find the best tuning parameters for Ridge and Lasso, I will perform cross-validation on the model, and this choose the lowest lambda value, which should provide me with the best parameters.
+
+## Ridge Regression
+
+```{r Ridge regression}
+set.seed(1)
+ridge.fit <- glmnet(x.fit, trsp, alpha = 0)
+names(ridge.fit)
+cv.ridge <- cv.glmnet(x.fit, trsp, alpha = 0, nfolds = 10)
+bestridge_lambda <- cv.ridge$lambda.min # best tuning parameter
+bestridge_lambda
+plot(cv.ridge)
+```
+The best lambda value corresponds with 0.04734258 for seed of 1 for Ridge regression.
+
+## Lasso Regression
+
+```{r Lasso regression}
+set.seed(1)
+lasso.fit <- glmnet(x.fit, trsp, alpha = 1)
+names(lasso.fit)
+cv.lasso <- cv.glmnet(x.fit, trsp, alpha = 1, nfolds = 10)
+bestlasso_lambda <- cv.lasso$lambda.min # best tuning parameter
+bestlasso_lambda
+plot(cv.lasso)
+```
+The best lambda value corresponds with 0.002146928. Lasso does better at interpretation because it turns more variables into zero, so there will be fewer variables to deal with during interpretation. 
+
+## Explain the coefficients for Ridge and Lasso
+
+```{r ridge coefficients}
+coef(ridge.fit, s = bestridge_lambda)
+```
+These are the coefficient values for ridge regression when the best lambda value is chosen. All variables are included.
+
+```{r Lasso coefficients}
+coef(lasso.fit, s = bestlasso_lambda)
+```
+These are the coefficient values for lasso regression when the best lambda value is chosen. Normally, some coefficients shouldn't have a value, but then because of the transformations all coefficients are included in this lasso regression.
+
+## Perform Predictions on Ridge and Lasso
+
+```{r Ridge predictions}
+ridge.pred <- exp(predict(ridge.fit, s = bestridge_lambda, newx = model.matrix(SalePrice ~., data = test)[,-1]))
+head(ridge.pred)
+```
+
+```{r Lasso predictions}
+lasso.pred <- exp(predict(lasso.fit, s = bestlasso_lambda, newx = model.matrix(SalePrice ~., data = test)[,-1]))
+head(lasso.pred)
+```
+The predictions look on par for houses in Iowa, so I think it is safe to say that these are accurately predicted.
+
+## Error Rate for Ridge and Lasso
+```{r error rate for ridge and lasso}
+ridge.cvmse <- ridge.fit$dev.ratio[which.min(cv.ridge$lambda)]
+lasso.cvmse <- lasso.fit$dev.ratio[which.min(cv.lasso$lambda)]
+ridge.cvmse 
+lasso.cvmse 
+```
+
+## Lasso and Ridge MSE
+
+```{r lasso and ridge mse}
+lasso.error <- mean((lasso.pred-test$SalePrice)^2)
+ridge.error <- mean((ridge.pred-test$SalePrice)^2)
+```
+
+
+# Generalized Additive Model
+
+```{r gam model}
+train.gam <- gam(log(SalePrice)~s(LotArea) + s(OverallQual) + s(OverallCond) + s(YearBuilt) +
+s(YearRemodAdd) + s(BsmtFinSF1) + s(BsmtFinSF2) + s(BsmtUnfSF) + s(X1stFlrSF) + s(X2ndFlrSF) +
+s(LowQualFinSF) + BsmtFullBath + BsmtHalfBath + FullBath + HalfBath + s(BedroomAbvGr) + s(KitchenAbvGr) + 
+s(TotRmsAbvGrd) + s(Fireplaces) + s(GarageCars) + s(GarageArea) + s(WoodDeckSF) + s(MoSold), df = 4, data = train)
+
+train.gam
+summary(train.gam)
+```
+
+When choosing the best tuning parameter, I am using the default degree of freedom, 4, and mention this as the tuning parameter. From the above model, there are some clear variables that are not significant for this model, such as BsmtHalfBath and FullBath. 
+
+## Plotting the GAM
+
+```{r gam plot}
+par(mfrow = c(2,3))
+plot(train.gam, se = T, col = "darkred")
+```
+## Perform predictions on GAM
+
+```{r gam predictions}
+gam.pred <- exp(predict(train.gam, newdata = test))
+head(gam.pred)
+```
+
+## GAM MSE
+
+```{r gam mse}
+gam.error <- mean((gam.pred-test$SalePrice)^2)
+```
+
+## Checking coefficients for GAM
+
+```{r gam coef}
+coef(train.gam, complete = T)
+```
+
+# Decision Tree Model
+
+```{r decision tree model}
+train.tree <- tree(SalePrice ~ ., data = train)
+summary(train.tree)
+```
+There are only 6 variables the decision tree decided to use. Also, the tree has 12 terminal nodes, which is relatively large, but not for this data set.
+
+## Glimpse at the tree
+
+```{r tree}
+train.tree
+```
+Choosing node 7 here. This node asked whether or not OverallQual was greater than 8.5. If OverallQual was in this threshold, the tree split the average, and if the house had an OverallQual which was greater, then the price of the house is predicted to be higher than 388500.
+
+## Plot the tree
+
+```{r plotted tree}
+r.tree <- rpart(SalePrice ~ ., data = train)
+rpart.plot(r.tree)
+```
+Instead of plotting the tree regularly, use *rpart* to make the tree easily readable. The tree still gives the same results.
+
+## Decision Tree Prediction
+
+```{r tree predictions}
+tree.pred <- predict(train.tree, newdata = test)
+head(tree.pred)
+```
+
+## Decision Tree Prediction Error
+
+```{r tree error}
+tree.error <- mean((tree.pred-test$SalePrice)^2)
+```
+
+
+## Decision Tree CV
+
+```{r cv.tree}
+cv.train <- cv.tree(train.tree, FUN = prune.tree)
+best.size <- cv.train$size[which.min(cv.train$dev)]
+best.size
+```
+The best size for the tree appears to be K = 12, now I will prune a tree with the above tree size.
+
+## Looking at CV values
+
+```{r tree errors}
+cv.train
+```
+
+## Plotting CV size
+
+```{r plot cv.tree}
+plot(cv.train$k, cv.train$dev, type = "b", main = "cv errors plot")
+plot(cv.train$size, cv.train$dev, type = "b", main = "best size plot")
+```
+Here it is verified that 12 is the best size for the tree, visually.
+
+## Pruning the Tree
+
+```{r pruned tree}
+pruned.tree <- prune.tree(train.tree, best = 5)
+plot(pruned.tree)
+text(pruned.tree, pretty = 1)
+pruned.tree
+```
+Looking at the differences between the pruned tree and the unpruned tree, there is no difference at all in the chosen node of 7 with the best size of 11. In this case, I am changing the best size down to 5 as a standard, just to make the plotted tree look readable, and to still include node 7.
+
+## Pruned Tree Predictions
+
+```{r pruned tree predictions}
+pruned.pred <- predict(pruned.tree, newdata = test)
+head(pruned.pred)
+```
+Since the pruned and unpruned tree are the same, I am seeing the same predictions as well.
+
+## Pruned Tree Errors
+
+```{r pruned tree errors}
+pruned.error <- mean((pruned.pred-test$SalePrice)^2)
+```
+
+# Random Forest
+
+```{r Random Forest}
+set.seed(1)
+sqrt(ncol(train) - 1) # 4.79... ~ 5
+rf.train <- randomForest(SalePrice ~ ., data = train, mtry = 5, importance = T, ntree = 1000)
+rf.train
+```
+Here I found the value of mtry to be 5, then fit a randomForest model with mtry of 5, and number of trees to be 1000.
+
+## Checking Importance
+
+```{r random forest importance}
+importance(rf.train)
+varImpPlot(rf.train)
+```
+From the plot, it looks like OverallQual, X2ndFlrSF and X1stFlrSF are the most important when it comes to MSE. MoSold and LowQualFinSF have almost no importance.
+
+## Random Forest Predictions
+
+```{r random forest predictions}
+rf.pred <- predict(rf.train, newdata = test)
+head(rf.pred)
+```
+
+## Random Forest Errors
+
+```{r random forest errors}
+rf.error <- mean((rf.pred - test$SalePrice)^2)
+```
+
+# Boosting 
+
+## Boosting CV
+
+```{r Boosting CV}
+#First, I need to find the best number of trees. 10-fold CV.
+train.boost.cv <- gbm(SalePrice ~ ., data = train, 
+                      distribution = "gaussian", 
+                      shrinkage = 0.01, 
+                      cv.folds = 10) # leave n.tree out, it'll use default
+which.min(train.boost.cv$cv.error)
+```
+
+Through cross-validation, 100 trees is the best number to iterate through.
+
+```{r Boosting model}
+train.boost <- gbm(SalePrice ~., data = train, distribution = "gaussian", n.trees = 100, shrinkage = 0.01)
+train.boost
+summary(train.boost)
+```
+23 predictors were used in the boosting model, 5 of them having non-zero influence. The 5 predictors that some non-zero influence are: OverallQual, GarageCars, X1stFlrSF, FullBath, and YearBuilt. OverallQual has the highest relative influence in the boosting model.
+
+## Boosting Predictions
+
+```{r Boosting Predictions}
+boosting.pred <- predict(train.boost, newdata = test, n.trees = 100)
+head(boosting.pred) 
+```
+
+## Boosting MSE
+
+```{r Boosting MSE}
+boosting.error <- mean((boosting.pred - test$SalePrice)^2)
+```
+
+
+# Bagging
+
+```{r Bagging Model}
+ncol(train) - 1 # number of predictors
+bag.train <- randomForest(SalePrice ~., data = train, mtry = 23, importance = T) 
+```
+Setting mtry to 23, I determined in the same chunk that the number of predictors should be 23.
+
+## Bagging Importance
+
+```{r Bagging importance}
+importance(bag.train)
+varImpPlot(bag.train)
+```
+Just like before, the most important predictors are the same as the other methods. OverallQual, X1stFlrSF, X2ndFlrSF.
+
+## Bagging Predictions
+
+```{r Bagging Predictions}
+bag.pred <- predict(bag.train, newdata = test)
+head(bag.pred)
+```
+Predictions line up for housing prices.
+
+## Bagging Errors
+
+```{r Bagging Errors}
+bag.error <- mean((bag.pred - test$SalePrice)^2)
+```
+
+# All MSE
+```{r MSE all models, echo=FALSE}
+paste(c('KNN MSE:',knn.error))
+paste(c('Linear Regression MSE:',lin.error))
+paste(c('Forward Stepwise MSE:',forward.error))
+paste(c('Backward Stepwise MSE:',backward.error))
+paste(c('Best Subset MSE:',subset.error))
+paste(c('Ridge Regression MSE:',ridge.error))
+paste(c('Lasso Regression MSE:',lasso.error))
+paste(c('Generalized Additive Model MSE:',gam.error))
+paste(c('Decision Tree MSE:',tree.error))
+paste(c('Pruned Tree MSE:',pruned.error))
+paste(c('Random Forest MSE:',rf.error))
+paste(c('Boosting MSE:',boosting.error))
+paste(c('Bagging MSE:',bag.error))
+```
+KNN has the lowest MSE, while Linear Regression has the highest. My question is, will these play out the same way using the Kaggle score?
+
+# Which method do I think will perform the best?
+
+I think that the Linear models will perform the best. My reason is because this model was the easiest to tamper with for me to get values that were desirable. If not for this reason, I think KNN would perform the best because it has the lowest MSE of all methods.
+
+# Writing CSVs
+```{r save data for knn}
+Id <- seq(1461,2919)
+knn.df <- data.frame(Id, knn.pred)
+colnames(knn.df) <- c('Id', 'SalePrice')
+write.csv(knn.df, file='TestPredictions_KNN.csv', row.names = FALSE)
+
+# Kaggle SCORE: 0.20829
+```
+
+```{r save data for linear regression}
+linear.df <- data.frame(Id, linear.pred)
+colnames(linear.df) <- c('Id', 'SalePrice')
+write.csv(linear.df, file='TestPredictions_LR.csv', row.names = FALSE)
+
+# Kaggle SCORE: 0.14867 
+```
+
+```{r save data for forward stepwise selection}
+forward.df <- data.frame(Id, fwd.predictions)
+colnames(forward.df) <- c('Id', 'SalePrice')
+write.csv(forward.df, file='TestPredictions_Forward.csv', row.names = FALSE)
+
+# Kaggle Score: 0.22896
+```
+
+```{r save data for backward stepwise selection}
+backward.df <- data.frame(Id, bwd.predictions)
+colnames(backward.df) <- c('Id', 'SalePrice')
+write.csv(backward.df, file='TestPredictions_Backward.csv', row.names = FALSE)
+
+# Kaggle Score: 0.22896
+```
+
+```{r save data for subset selection}
+subset.df <- data.frame(Id, subset.predictions)
+colnames(subset.df) <- c('Id', 'SalePrice')
+write.csv(subset.df, file='TestPredictions_Subset.csv', row.names = FALSE)
+ 
+# Kaggle SCORE: 0.22896
+
+```
+
+```{r save data for lasso}
+lasso.df <- data.frame(Id, lasso.pred)
+colnames(lasso.df) <- c('Id', 'SalePrice')
+write.csv(lasso.df, file='TestPredictions_Lasso.csv', row.names = FALSE)
+
+# Kaggle SCORE: 0.15165
+```
+
+```{r save data for Ridge}
+ridge.df <- data.frame(Id, ridge.pred)
+colnames(ridge.df) <- c('Id', 'SalePrice')
+write.csv(ridge.df, file='TestPredictions_Ridge.csv', row.names = FALSE)
+
+# Kaggle SCORE: 0.15508
+```
+
+```{r save data for GAM}
+gam.df <- data.frame(Id, gam.pred)
+colnames(gam.df) <- c('Id', 'SalePrice')
+write.csv(gam.df, file='TestPredictions_GAM.csv', row.names = FALSE)
+
+# Kaggle Score: 0.13368
+```
+
+```{r save data for Decision Tree}
+dt.df <- data.frame(Id, tree.pred)
+colnames(dt.df) <- c('Id', 'SalePrice')
+write.csv(dt.df, file='TestPredictions_DT.csv', row.names = FALSE)
+
+# Kaggle Score: 0.24341
+```
+
+```{r save data for Pruned Tree}
+pruned.df <- data.frame(Id, pruned.pred)
+colnames(pruned.df) <- c('Id', 'SalePrice')
+write.csv(pruned.df, file='TestPredictions_Pruned.csv', row.names = FALSE)
+ 
+# Kaggle Score: 0.26001
+```
+
+```{r save data for Random Forest}
+rf.df <- data.frame(Id, rf.pred)
+colnames(rf.df) <- c('Id', 'SalePrice')
+write.csv(rf.df, file='TestPredictions_RF.csv', row.names = FALSE)
+
+# Kaggle Score: 0.1528
+``` 
+
+```{r save data for Boosting}
+boosting.df <- data.frame(Id, boosting.pred)
+colnames(boosting.df) <- c('Id', 'SalePrice')
+write.csv(boosting.df, file='TestPredictions_Boosting.csv', row.names = FALSE)
+
+# Kaggle Score: 0.32367
+```
+
+```{r save data for Bagging}
+bag.df <- data.frame(Id, bag.pred)
+colnames(bag.df) <- c('Id', 'SalePrice')
+write.csv(bag.df, file='TestPredictions_Bagging.csv', row.names = FALSE)
+
+# Kaggle Score: 0.15406
+```
+
+# Discussion on why some methods performed better or worst
+
+The first method I want to mention is the Generalized Additive Model. As my best model, I was not expecting this model to perform the way it did. Though, I think this could attributed to carefully looking at the data and choosing variables to put a spline on based on if it is linear or not, and how easy it was to tell if I was overfitting or not.
+
+Next, I want to talk about how the decision tree performed better than the pruned tree. Initially, I was expecting the pruned tree to perform better just because it is a more specified version of the decision tree, but I think this ultimately led to its downfall.
+
+As for the worst method, I am not too surprised by it being the boosting model. I found the number of predictors to try to be 23, and the model suggested that 100 trees was optimal still. I feel like this is the reason the model did the worst, but even so, I tried 1000 trees and the model actually performed worse than with 100 trees. Potentially, I could change the number of predictors used, instead of the optimal amount.
+
+# Conclusion / Summary
+
+Overall, I am happy that I was able to get at least model under a score of 0.14. Using a variety of methods on this data set showed me how different outcomes can be, and the importance of being able to test out many different methods, instead of just going with one I am comfortable with. Though, every model seemed to give good predictions when it came to housing prices, even the boosting model and that performed the worst. I think I can say overall that the models made in this project can somewhat accurately depict housing prices in Iowa. 
+
+# Discussion for the future
+
+In the future, I think that there are a number of different things I could look into for this data specifically. With more time, I could investigate the variables a bit more indepth, and try to apply the investigations to the models built. I could look into things like does having more full baths over half baths affect things like house price, even if the number of bedrooms are not ideal. 

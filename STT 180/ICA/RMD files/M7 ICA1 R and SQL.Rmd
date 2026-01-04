@@ -1,0 +1,328 @@
+---
+title: "SQL and R"
+author: "Derien W"
+date: "M7 ICA1 "
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: false
+    df_print: paged
+---
+
+<style type="text/css">
+/* Title */
+h1.title {
+  color: #3C98E5;
+  font-size:60px;
+  font-weight: bold;
+}
+/* Level 1 header */
+h1 {
+  color: #3C98E5;
+  font-weight: bold;
+}
+/* Level 2 header */
+h2 {
+  color: #3C98E5;
+  font-weight: bold;
+}
+/* Level 4 header */
+h4 {
+  color: #000000;
+  font-weight: bold;
+}
+/* Table of contents */
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    z-index: 2;
+    color: #fff;
+    background-color: #F2B800;
+    border-color: #337ab7;
+}
+/* Navigation pills */
+.nav-pills>li.active>a, .nav-pills>li.active>a:focus, .nav-pills>li.active>a:hover {
+    color: #fff;
+    background-color: #F2B800;
+}
+</style> 
+
+```{r setup, include=FALSE}
+# global chunk options
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = TRUE,
+                      error = TRUE,
+                      message = FALSE, 
+                      warning = FALSE,
+                      comment = NA,
+                      fig.width=9, 
+                      fig.height=7)
+```
+
+# Introduction
+
+A database is a structured set of data. Terminology is a little bit different
+when working with a database management system compared to working with data in
+R.
+
+- field: variable or quantity
+- record: collection of fields
+- table: collection of records with all the same fields
+- database: collection of tables
+
+The relationship between R terminology and database terminology is explained
+below.
+
+**R terminology**|**Database terminology**
+-----------------|-------------------------
+column|field
+row|record
+data frame|table
+types of columns|table schema
+collection of data frames|database
+
+SQL (structured query language) allows you to directly interact with a database
+and perform tasks such as pull data and make updates. R has two packages
+available that make it easy to run SQL queries: `DBI`, `RSQLite`.
+
+# Getting started
+
+To get started, load packages `DBI`, `RSQLite`, and `tidyverse`. Install
+any packages by entering command `install.packages("package")` in your
+Console pane.
+
+Package `DBI` provides a database interface definition for communication 
+between R and relational database management systems. Package `RSQLite`
+embeds the 'SQLite' database engine in R and provides an interface compliant
+with the package `DBI`.
+
+```{r packages}
+library(DBI)
+library(RSQLite)
+library(tidyverse)
+```
+
+# Open connection
+
+The below chunk of code will turn data frame `mtcars` into a database named
+`mtcarsdb`. In the SQL queries that follow, you will see that the database
+is referenced by name `mtcarsdb`. From Questions 1-9 you will convert the SQL statements to `dplyr` code chunks to get the same output as displayed. In Questions 10-14, you will write simple queries to extract the desired information.
+
+At the conclusion of this RMarkdown file there is a code chunk that
+closes the connection and frees resources. Run that chunk when you complete
+the document.
+
+```{r connection}
+con <- dbConnect(SQLite(), ":memory:")
+dbWriteTable(con, "mtcarsdb", mtcars)
+
+# see tables
+dbListTables(con)
+```
+
+# SQL to dplyr {.tabset .tabset-fade .tabset-pills}
+
+For each SQL query with function `dbGetQuery()`, think about what data is being
+pulled from the database. Then **use object `mtcars` in R along with functions
+in package `dplyr` to obtain the same result**.
+
+## Question 1
+
+```{r Q-1}
+dbGetQuery(con, statement = "SELECT mpg FROM mtcarsdb")
+mtcars %>% select(1)
+```
+<br><br>
+
+## Question 2
+
+```{r Q-2}
+dbGetQuery(con, paste("SELECT * FROM mtcarsdb", 
+                      "WHERE mpg > 25")
+           )
+mtcars %>% filter(mpg > 25)
+```
+<br><br>
+
+## Question 3
+
+```{r Q-3}
+dbGetQuery(con, paste("SELECT * FROM mtcarsdb", 
+                      "WHERE mpg > 20", 
+                      "ORDER BY cyl")
+           )
+mtcars %>% 
+  filter(mpg > 20) %>%
+  arrange(cyl)
+```
+<br><br>
+
+## Question 4
+
+```{r Q-4}
+dbGetQuery(con, paste("SELECT mpg, wt, gear FROM mtcarsdb",
+                      "WHERE mpg > 25 AND wt < 3", 
+                      "ORDER BY mpg DESC")
+           )
+mtcars %>% 
+  select(mpg, wt, gear) %>%
+   filter(mpg > 25 & wt < 3) %>%
+  arrange(-mpg)
+```
+
+<br><br>
+
+## Question 5
+
+```{r Q-5}
+dbGetQuery(con, paste("SELECT mpg, wt, gear FROM mtcarsdb",
+                      "WHERE mpg > 25 OR wt < 3",
+                      "LIMIT 6")
+           )
+mtcars %>% 
+  select(mpg, wt, gear) %>%
+   filter(mpg > 25 | wt < 3) %>%
+ slice(1:6)
+```
+
+<br><br>
+
+# SQL computations to dplyr {.tabset .tabset-fade .tabset-pills}
+
+For each SQL query with function `dbGetQuery()`, think about what data is being
+pulled from the database. Then use object `mtcars` in R along with functions
+in package `dplyr` to obtain the same result. You will need to make use of
+`summarise()`.
+
+## Question 6
+
+```{r Q-6}
+dbGetQuery(con, statement = "SELECT AVG(mpg) FROM mtcarsdb")
+mtcars %>% summarize(AVG_mpg = mean(mpg, na.rm=TRUE))
+```
+
+<br><br>
+
+## Question 7
+
+```{r Q-7}
+dbGetQuery(con, "SELECT COUNT(mpg) FROM mtcarsdb")
+mtcars %>% summarize(COUNT_mpg = length(mpg))
+```
+
+<br><br>
+
+## Question 8
+
+```{r Q-8}
+dbGetQuery(con, paste("SELECT cyl, AVG(hp) FROM mtcarsdb",
+                      "GROUP BY cyl",
+                      "ORDER BY AVG(hp) DESC")
+           )
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarize(AVG_hp = mean(hp, na.rm=TRUE)) %>% 
+  arrange(-AVG_hp) 
+```
+
+<br><br>
+
+## Question 9
+
+```{r Q-9}
+dbGetQuery(con, paste("SELECT cyl, MAX(hp) FROM mtcarsdb",
+                      "GROUP BY cyl",
+                      "ORDER BY AVG(hp) ASC")
+           )
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarize(MAX_hp = max(hp), AVG_hp = mean(hp)) %>% 
+  arrange(AVG_hp) %>% 
+  select(cyl, MAX_hp)
+```
+
+<br><br>
+
+# SQL queries {.tabset .tabset-fade .tabset-pills}
+
+Use function `dbGetQuery()` to write SQL queries for tasks 10 - 14. Make
+use of function `paste()` to neatly format your SQL statement.
+
+## Question 10
+
+Write a SQL query that returns 10 rows of the variables 
+`mpg`, `gear`, and `carb`.
+
+```{r Q-10}
+dbGetQuery(con, paste("SELECT mpg, gear, carb FROM mtcarsdb",
+                      "LIMIT 10")
+           )
+```
+
+<br><br>
+
+## Question 11
+
+Write a SQL query that returns the variables `mpg`, `gear`, and `carb` 
+ordered in ascending order by `carb`.
+
+```{r Q-11}
+dbGetQuery(con, paste("SELECT mpg, gear, carb FROM mtcarsdb",
+                      "ORDER BY carb ASC")
+           )
+```
+
+<br><br>
+
+## Question 12
+
+Write a SQL query that returns the variables `mpg`, `cyl`, and `carb`, where 
+`carb` is greater than 2 and `cyl` is greater than 4.
+
+```{r Q-12}
+dbGetQuery(con, paste("SELECT mpg, cyl, carb FROM mtcarsdb",
+                      "WHERE carb > 2 AND cyl > 4")
+           )
+```
+
+<br><br>
+
+## Question 13
+
+Write a SQL query that returns the sum of `wt` for each `carb` value.
+
+```{r Q-13}
+dbGetQuery(con, paste("SELECT carb, SUM(wt) FROM mtcarsdb",
+                      "GROUP BY carb")
+           )
+```
+
+<br><br>
+
+## Question 14
+
+Write a SQL query that returns the mean `mpg`, mean `hp`, and mean `wt` 
+grouped by `cyl` and then `carb`.
+
+```{r Q-14}
+dbGetQuery(con, paste("SELECT cyl, carb, AVG(mpg), AVG(hp), AVG(wt) FROM mtcarsdb",
+                      "GROUP BY cyl, carb")
+           )
+```
+
+<br><br>
+
+# Close connection
+
+```{r close}
+dbDisconnect(con)
+```
+
+
+# References {#References-link}
+
+1. https://www.w3schools.com/sql/
+
+2. https://www.1keydata.com/sql/sql.html
+
+3. http://www.dusun-think.net/dosya/czyayin/mysqlcheatsheet.pdf

@@ -1,0 +1,202 @@
+---
+title: "Iteration with loops"
+author: "Derien W"
+date: "M4 ICA2"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    number_sections: no
+    df_print: paged
+---
+
+<style type="text/css">
+/* Title */
+h1.title {
+  color: #ED4F4F;
+  font-size:35px;
+  font-weight: bold;
+}
+/* Level 1 header */
+h1 {
+  color: #4053B7;
+}
+/* Level 2 header */
+h2 {
+  color: #4053B7;
+}
+/* Table of contents */
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    z-index: 2;
+    color: #fff;
+    background-color: #4053B7;
+    border-color: #337ab7;
+}
+/* Navigation pills */
+.nav-pills>li.active>a, .nav-pills>li.active>a:focus, .nav-pills>li.active>a:hover {
+    color: #fff;
+    background-color: #ED4F4F;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE, 
+                      warning = FALSE,
+                      comment = NA)
+```
+
+# Function `fib()`
+
+## Introduction
+
+The Fibonacci sequence is the sequence $\{F_n\colon n \geq 1\}$ of numbers
+defined by $F_1 = 0, F_2 = 1$ and $F_n = F_{n-2} + F_{n-1}$ for $n\geq 3$. 
+For example, the first seven Fibonacci numbers are
+\begin{align*}
+F_1 &= 0\\
+F_2 &= 1\\
+F_3 &= 0+1 = 1\\
+F_4 &= 1 + 1 = 2\\
+F_5 &= 1 + 2 = 3\\
+F_6 &= 2 + 3 = 5\\
+F_7 &= 3 + 5 = 8\\
+\end{align*}
+
+## Part a
+
+### `fib()`
+
+Write a function, `fib()`, which uses a `for` loop. Function `fib()` should 
+take one argument, `n`, and return the first `n` Fibonacci numbers in a vector.
+See below for some examples.
+
+```{r fib-function}
+fib <- function(n) {
+  if (n < 2) return(1)
+  fib(n - 2) + fib(n - 1)
+}
+```
+
+```{r fib-function-test, eval=FALSE, results='hold'}
+fib(n = 1)
+fib(n = 2)
+fib(n = 7)
+fib(n = 10)
+```
+
+## Part b
+
+### `fib_1()`
+
+Modify `fib()` so that it uses a `while` loop instead of a `for` loop. Call
+this new function `fib_1()`. Test that your function works with the following
+examples below.
+
+```{r fib-function-while}
+fib1 <- function(n) {
+  if (n == 1){
+    return(0);
+  } else if (n == 2) {
+    return(1);
+  } else {
+    num1 <- 0
+    num2 <- 1
+    i <- 3
+    while (i <= n) {
+      temp <- num1 + num2
+      num1 <- num2
+      num2 <- temp
+      i <- i+1
+    }
+    return(num2)
+  }
+}
+```
+
+```{r fib-function-test-while, eval=FALSE, results='hold'}
+fib1(n = 1)
+fib1(n = 2)
+fib1(n = 7)
+fib1(n = 10)
+```
+
+
+# Function `all.primes()`
+
+## Introduction
+
+Your goal is to write a function `all.primes()` that will return all possible
+prime numbers among the first `n` positive integers. For example, among the 
+integers 1 through 10, there are prime numbers: 2, 3, 5, 7. Recall that
+a prime number is a whole number greater than 1 whose only factors are 
+1 and itself.
+
+To get started, proceed to step 1.
+
+## Step 1
+
+### `is.prime()`
+
+R has built-in functions that perform logical tests. For example, 
+`is.numeric()` and `is.character()` performs a logical test if an object is
+numeric and if an object is of type character, respectively. Write a function
+called `is.prime()` that tests if a numeric vector of length 1 is a 
+prime number or not. The function should return a single `TRUE` or `FALSE`
+value. See below for some examples.
+
+```{r is.prime}
+
+is.prime <- function(x) {
+  for (i in 2:ceiling(sqrt(x))){
+    if ((x/i)%%1==0){
+      return(FALSE)
+    }
+  }
+  return(TRUE)
+}
+```
+
+```{r is.prime-examples, eval=FALSE, results='hold'}
+is.prime(x = 2)
+is.prime(x = 10)
+is.prime(x = 13)
+```
+
+
+## Step 2 
+
+### `all.primes()`
+
+Write a function `all.primes()` that has one argument, `n`, and returns all
+possible prime numbers among the first `n` positive integers. See below for
+some examples.
+
+```{r all.prime}
+all.primes <- function(n) {
+  output <- logical(n)
+  for (i in 1:n){
+    if(is.prime(x=i)){
+      output[i] <- TRUE
+    }
+  }
+  output <- which(output)
+  
+  if(length(output) == 0){
+    return(NULL)
+  } else {
+    return(output)
+  }
+}
+
+```
+
+```{r allprimes-examples, eval=FALSE, results='hold'}
+all.primes(n = 10)
+all.primes(n = 21)
+all.primes(n = 2)
+```

@@ -1,0 +1,74 @@
+---
+title: "ICA 12"
+author: "Derien Weatherspoon"
+date: "2023-04-19"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+library(tseries)
+library(forecast)
+```
+
+
+## Question 1
+
+Import the data, convert it to a time series, and then plot it.
+
+```{r Q1}
+beer <- read.csv("beer.csv")
+beer_ts <- ts(beer[,2], start = c(1956,1), frequency = 12)
+plot(beer_ts, main = "Monthly Beer Production", ylab = "Million Barrels")
+```
+
+## Question 2
+
+Do additive and multiplicative decompositions of the data. Which one looks better? From the seasonal component, what part of the year typically has the largest beer consumption?
+
+```{r Q2}
+beer_additive <- decompose(beer_ts, type = "additive")
+beer_multiplicative <- decompose(beer_ts, type = "multiplicative")
+plot(beer_additive$seasonal)
+plot(beer_multiplicative$seasonal)
+```
+
+# Question 3
+
+Create the following forecast models for the data
+a. Naïve
+b. Seasonal naïve
+c. Holt-Winters
+d. ARIMA
+
+```{r Q3}
+# naive model
+beer_naive <- naive(beer_ts)
+plot(beer_naive)
+
+# seasonal naive model
+beer_snaive <- snaive(beer_ts, h = 12)
+plot(beer_snaive)
+
+# holt-winters
+beer_hw <- hw(beer_ts, h = 12)
+plot(beer_hw)
+
+# automatic arima
+beer_arima <- auto.arima(beer_ts)
+#plot(beer_arima)
+```
+# Question 4
+
+Print out the summary of each model. Compare the MAPE’s and MAE’s.
+
+```{r Q4}
+summary(beer_naive)
+summary(beer_snaive)
+summary(beer_hw)
+summary(beer_arima)
+```
+

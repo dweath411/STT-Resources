@@ -1,0 +1,195 @@
+---
+title: "STT 465 HW 3"
+author: "Derien Weatherspoon"
+date: "2023-02-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+library(ggplot2)
+```
+
+## Question 1:
+Define a probability density function as p(x) = cx3 on the interval 0 < X < 3.
+a) Determine what c is.
+
+
+
+a: Setting the integral up to be c * integrand from 0 to 3 * x^3 dx, solving for c warrants 4/81
+
+b) Use the inverse cdf method to simulate 10,000 outcomes of the distribution. Estimate the mean and standard deviation of the distribution.
+```{r Q1 b}
+#Build an integral here with the function cx^3 with bounds from 0 to 3
+
+integral_1 <- function(x) {
+  c <- 4/81
+  result <- c*x^3
+  return(result)
+}
+n <- 10000
+u <- runif(n,0,3)
+integrate(integral_1, lower = 0, upper = 3)
+df_q1 <- integral_1(u)
+mean(u)
+sd(u)
+```
+
+
+c) Plot a histogram of your simulation results. Does it match what you would expect?
+```{r Q1 c}
+#Plotting a histogram
+hist(df_q1, probability = T, main = "Histogram for Question 1")
+#plot(density(df_q1),col="blue",lwd=2,main="PDF for n=10000") <- another way to do it
+```
+Both plots follow the same density pattern, so it adds up. It is plotting the distribution.
+
+
+d) Re-do (c) with geom_density instead of geom_histogram. What is it doing?
+```{r Q1 d}
+ggplot() + geom_density(aes(df_q1), fill = "red", color = "black")
+```
+Fits a smooth curve of the density of the distribution 
+
+
+e) Numerically approximate the expected value, variance, and standard deviation of the
+distribution. Calculate the expected value from the definition with an integral and
+compare how close the 2 are.
+```{r Q1 e}
+#expected value
+calc_expected_value <- function(distribution) {
+  # Calculate expected value
+  mean(distribution)
+}
+calc_expected_value(df_q1)
+#variance
+var(df_q1)
+#standard deviation
+sd(df_q1)
+```
+
+
+f) Use a simulation with acceptance/rejection to approximate the expectation of X, given
+that x is greater than 2.
+```{r Q1 f}
+
+p <- function(x) 0.25 * x^3
+g <- function(x) 1
+M <- p(max(seq(2, 3, by=0.01))) / g(max(seq(2, 3, by=0.01)))
+M
+
+```
+
+
+## Question 2: 
+For the following integral: (on PDF)
+a) Generate a plot of the region.
+```{r Q2 a}
+
+a <- b <- runif(100000,0,8)
+f <- exp(sin(b))/(1+sqrt(b))
+plot(a,f)
+```
+
+b) Estimate using standard Monte Carlo integration (n = 100,000)
+```{r Q2 b}
+mean(f)*8
+```
+
+
+c) Estimate using acceptance/rejection Monte Carlo (again, n = 100,000)
+```{r Q2 c}
+fx <- runif(100000,0,4)
+p2 <- sum(fx < f)/100000
+integral_2 <- p2*8*4
+integral_2
+```
+
+
+## Question 3:
+
+For the following integral (on PDF):
+
+a) Compute the following integral both with the standard Monte Carlo approach (with appropriately truncated bounds) and with Importance Sampling, using an appropriate normal distribution as an importance function. Use n = 10,000 both times.
+
+```{r Q3 a}
+# Define the function to be integrated
+num <- 10000
+integral_3 <- function(x) {
+  result_2 <- exp(-(x-6)^4)
+}
+#integrate
+u2 <- runif(num,4,8)
+df_q3 <- mean(integral_3(u2))*(8-4)
+df_q3
+```
+
+
+b) Re-do both methods 100 times. Compute the variance of the answers from each method and compare.
+```{r Q3 b}
+# Monte Carlo method. Use a for loop as mentioned in class.
+simulated_integral <- c() #store vector
+for (i in 1:100) {#100 times
+  t <- runif(10000,4,8) #same num
+  simulated_integral[i] <- mean(integral_3(t))*(8-4)
+}
+mc_var <- var(simulated_integral)
+
+#method for importance sampling
+simulated_integral_2 <- c()
+for (i in 1:100){
+  r <- abs(rnorm(10000, mean = 6, sd = 1))
+  simulated_integral_2[i] <- mean(integral_3(r)/rnorm(r,6,1))
+}
+is_var <- var(simulated_integral_2)
+mc_var
+is_var #seems like the answer should not be that small
+```
+Both are very small in value, though I think the importance sampling variance is low due to error in code.
+
+## Question 4:
+
+Suppose we have an exponential probability distribution with parameter lambda = 1/5, so that its expected value is 5. We will perform some simulation experiments to determine the behavior of the sample mean.
+a) Generate 2,000 simulations which each constitute 100 outcomes of this distribution. Calculate the mean values for the 2,000 experiments.
+b) Next, calculate the mean value and variance for the 2,000 sample means.
+c) Repeat (a) and (b) for N = 1,000, 10,000, 100,000, and 1,000,000 outcomes (2,000 simulations of each). Note: 1,000,000 could take several minutes.
+d) Plot the log(Variance) vs. log(N). Do you get something which is close to a straight line? What is the slope? Does the relationship between N and the variance close to what you would expect with the Central Limit Theorem?
+
+```{r Q4}
+set.seed(304) 
+lambda <- 1/5 # parameter
+
+
+# function for generating sample means
+sample_mean <- function(n) {
+  x <- rexp(n, lambda)
+  mean(x)
+}
+
+# N values to simulate
+N_values <- c(100, 1000, 10000, 100000, 1000000)
+
+# store the results
+results <- matrix(NA, nrow = length(N_values), ncol = 3)
+colnames(results) <- c("N", "Mean of Sample Means", "Variance of Sample Means")
+
+for (i in seq_along(N_values)) {
+  N <- N_values[i]
+  samp_means <- replicate(2000, sample_mean(N))
+  mean_samp_means <- mean(samp_means)
+  variance_samp_means <- var(samp_means)
+  results[i, ] <- c(N, mean_samp_means, variance_samp_means)
+}
+print(results)
+plot(log(results[, 1]), log(results[, 3]), xlab = "log(N)", ylab = "log(Variance)")
+
+```
+It appears to a negative slope in a straight line. This is expected.
+
+## Sources
+
+https://bookdown.org/rdpeng/advstatcomp/rejection-sampling.html
+https://harrison4192.github.io/Simulacra/simulations.html#monte-carlo-integration

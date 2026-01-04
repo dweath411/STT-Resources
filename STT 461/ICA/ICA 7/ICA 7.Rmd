@@ -1,0 +1,105 @@
+---
+title: "ICA 7"
+author: "Derien Weatherspoon"
+date: "2023-03-15"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 1
+Define these matrices in R (using whichever technique you prefer)
+
+```{r}
+# define matrices
+A <- matrix(c(5,-1,5,-1,10,1,5,1,-3), nrow = 3, ncol = 3)
+B <- matrix(c(5,1,3,1,-2,0), nrow = 2, ncol = 3)
+C <- matrix(c(2,1,-3,4), nrow = 2, ncol = 2)
+x <- matrix(c(5,1,4), nrow = 3, ncol = 1)
+
+```
+
+## Question 2
+Compute CB
+
+
+```{r}
+CB <- C %*% B
+CB
+```
+
+## Question 3
+Compute Ax
+
+```{r}
+Ax <- A %*% x
+Ax
+```
+
+## Question 4
+Find det(C)
+
+```{r}
+det(C)
+```
+
+## Question 5
+Calculate BtB and BBt. What kind of matrices are these results?
+ 
+```{r}
+Bt <- t(B)
+BtB <- Bt %*% B
+BtB
+
+BBt <- B %*% Bt
+BBt
+```
+
+
+## Question 6
+Compute xtx. Note that this is the square of the norm of x.
+
+```{r}
+xt <- t(x)
+xtx <- xt %*% x
+xtx
+```
+
+## Question 7
+Solve the following for the unknown y: Ay = x.
+
+```{r}
+y <- solve(A,x)
+y
+```
+
+## Question 8
+Find the eigenvalues and eigenvectors of A. Note that the eigenvectors are perpendicular (this
+can be checked by seeing that the inner product is zero).
+
+```{r}
+eigen(A)$values
+eigen(A)$vectors
+```
+
+## Question 9
+Find the eigenvalues and eigenvectors of A2. How do the eigenvalues compare to that of A?
+
+```{r}
+A2 <- A %*% A
+eigen(A2)$values
+eigen(A2)$vectors
+```
+
+## Question 10
+Take a vector z = (1, -3, 4). Re-write z using the eigenvectors of A as the new basis.
+
+```{r}
+z <- c(1,-3,4)
+
+solve(eigen(A)$vectors, z) * z
+```
+
+

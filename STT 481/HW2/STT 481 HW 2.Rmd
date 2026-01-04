@@ -1,0 +1,509 @@
+---
+title: "STT 481 HW 2"
+author: "Derien Weatherspoon"
+date: "2023-02-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries and data, include=FALSE}
+set.seed(1)
+library(ISLR)
+library(car)
+library(corrplot)
+library(FNN)
+library(tidyverse)
+library(MASS)
+library(ggplot2)
+library(gpairs)
+SAT <- read.csv("sat.csv")
+arthritis <- read.csv("arthritis.csv")
+```
+
+## Question 1: 
+In 1982, average SAT scores were published with breakdowns of state-by-state performance in the United States. The average SAT scores varied considerably by state, with mean scores falling between 790 (South Carolina) to 1088 (Iowa). Two researchers examined compositional and demographic variables to examine to what extent these characteristics were tied to SAT scores. Fit a model with "sat" as the response, and "expend", "income", "public", and "takers" as predictors. Perform regression diagnostics on this model to answer the following questions. Display any plots that are relevant.
+
+a) Check the constant variance assumption for the errors.
+
+
+```{r Q1 a}
+sat.fit <- lm(sat ~ expend + income + public + takers, data = SAT) #Fitting the model
+summary(sat.fit) 
+
+plot(fitted(sat.fit), residuals(sat.fit), xlab = "Fitted", ylab = "Residuals") #checking constant variance assumption for the errors
+abline(h=1)
+ncvTest(sat.fit) #non-constant variance test for homoscedasticity
+spreadLevelPlot(sat.fit) #plotting studentized residuals vs fitted values
+```
+Looking at our plot, there doesn't appear to be anything wrong with it. The variances is pretty constant across the board for the fitted values. Also, I ran a non-constant variance score test, and the behavior of the points on our plot seem to be in line with the values from the test. There are no constant variance or homoscedasticity and residuals follow a pattern in the residual plot
+
+b) Check the normality assumption.
+
+```{r Q1 b}
+par(mfrow=c(2,2))
+qqnorm(residuals(sat.fit, ylab = "Residuals", main = "Q-Q Plot fitting Residuals"))
+qqline(residuals(sat.fit))
+
+qqnorm(scale(residuals(sat.fit)),ylab="Residuals",main="Q-Q Plot fitting Standardized Residuals")
+qqline(scale(residuals(sat.fit))) 
+
+```
+The residuals do not follow a straight line, they do not follow a normal distribution. 
+
+c) Check for large leverage points.
+```{r Q1 c}
+hat <- hatvalues(sat.fit)
+leverage_cut <- 5 * 2 * 1 / nrow(SAT)
+high_lev <- SAT[hat > leverage_cut,]
+high_lev #printing the table for desired 
+
+cut_off<- 4/((nrow(SAT)-length(sat.fit$coefficients)-2)) #changing the cutoff for our CD plot
+plot(sat.fit, which=4, cook.levels=cut_off) #CD plot
+#Now, seeing our plots, select points that stand out from cook's distance
+CD <-data.frame(cooks.distance(sat.fit))
+names(CD) <- "cook.distance"
+mean.cooks.distance <- mean(CD$cook.distance)
+
+influential.points <- CD[CD$cook.distance > 3*mean.cooks.distance,,drop=F]
+influential.points #points that stand out from cooks distance
+
+```
+Points with a higher leverage point than 2p/n should individually looked at, it is an indicator of high leverage
+
+d) Check for the outliers.
+
+```{r Q1 d}
+outlierTest(sat.fit)
+```
+No Studentized residuals with Bonferroni p < 0.05, so there are no outliers in this set.
+
+e) Check the structure of the relationship between the predictors and the response.
+
+```{r Q1 e}
+ceresPlots(sat.fit) #crPlot with all predictors involved
+sat.pred <- sat.fit$fitted.values
+
+cor(SAT$sat,sat.pred)
+```
+88% correlation between actual and predicted values from the model.
+
+f) Use pairs function in R to see the relationship between sat and other predictors. You can see takers appears to have a quadratic relationship with sat. Include this quadratic effect in your current model and perform the regression diagnostics. Check the structure of the relationship between the predictors and the response again.
+```{r Q1 f}
+pairs(SAT[, c("sat", "expend", "income", "public", "takers")])
+quad_sat.fit <- lm(sat ~ expend + income + public + takers + I(takers^2), data = SAT) #include quadratic effect with "takers" 
+summary(quad_sat.fit)
+takers2 <- SAT$takers*SAT$takers
+
+```
+The predictors "takers" and "expend" are still very significant for this model, and "expend" appear to be more significant in this quadratic model than the default linear regression model. Notably, we see that Adjusted R^2 has gone from 76% to 87%, which is desirable.
+
+
+g) Using the model in (a)-(e) (no quadratic effect), remove the large leverage points you found and perform the regression diagnostics. Check for large leverage points again.
+
+```{r Q1 g}
+lev <- hat(model.matrix(sat.fit))
+plot(lev)
+SAT[lev>0.2,] # obtain leverage values greater than 0.2
+
+#fit new model without the 3 leverage points
+SAT2 <- SAT[!(lev>0.2),]
+
+sat.fit_no_lev <- lm(sat~expend+income+public+takers, data = SAT2)
+summary(sat.fit_no_lev)
+
+par(mfrow=c(2,2))
+plot(sat.fit_no_lev)
+
+lev <-  hat(model.matrix(sat.fit_no_lev))
+plot(lev)
+# obtain leverage values greater than 0.2
+SAT2[lev>0.2,]
+```
+There are no leverage points in the new model ran, this caused a slight increased in adjusted R^2 from 76% to 78%.
+
+
+h) Comment on which model we should use. The model in (f) or the model in (a)-(e) with the removal of large leverage points that you did in (g)?
+
+Solution: I think it would be best if the model with the quadratic effect applied in (f) was used. The addition of the quadratic effect caused a much greater increase in adjusted R^2 than the removal of 3 large leverage points did. The model in (f) improved model performance much greater than the model in (g).
+
+## Question 2:
+It was stated in the text that classifying an observation to the class for which (4.17) is largest is equivalent to classifying an observation to the class for which (4.18) is largest. Prove that this is the case. In other words, under the assumption that the observations in the kth class are drawn from a N(mu_k,sigma^2) distribution, the Bayes classifier assigns an observation to the class for which the discriminant function is maximized.
+
+Solution: ON SEPARATE PAPER (Done)
+
+## Question 3:
+We now examine the differences between LDA and QDA.
+
+a) If the Bayes decision boundary is linear, do we expect LDA or QDA to perform better on the training set? On the test set?
+
+Solution: The QDA on the training set. This is because it is more flexible than LDA on training. On the test set, we use the LDA. This is due to the bias-variance trade off, and QDA has a higher chance to overfit a training set.
+
+b) If the Bayes decision boundary is non-linear, do we expect LDA or QDA to perform better on the training set? On the test set?
+
+Solution: For this, QDA on both works best. LDA isn't great working with assuming things are non-linear.
+
+c) In general, as the sample size n increases, do we expect the test prediction accuracy of QDA relative to LDA to improve, decline, or be unchanged? Why?
+
+Solution: We expect it to either increase or not change at all. This is due to earlier fact that QDA is more likely to overfit training data.
+
+d) True or False: Even if the Bayes decision boundary for a given problem is linear, we will probably achieve a superior test error rate using QDA rather than LDA because QDA is flexible enough to model a linear decision boundary. Justify your answer.
+
+Solution: False. Since QDA doesn't make assumptions on the decision boundary because it is a flexible analysis. It only influences bias-variance trade off slightly.
+
+
+## Question 4: 
+Suppose we collect data for a group of students in a statistics class with variables x_1 = hours studied, x_2 = undergrad GPA, and y = receive an A. We fit a logistic regression and produce estimated coefficient, Betaˆ0 = -6, Betaˆ1 = 0.05, Betaˆ2 = 1.
+
+a) Estimate the probability that a student who studies for 40 h and has an undergrad GPA of 3.5 gets an A in the class.
+
+```{r Q4 a}
+probability_4 <- function(a,b){ 
+  c <- exp(-6 + 0.05*a + 1*b);
+  return( round(c/(1+c),2))
+}
+#create a logit function that evaluates what we desire
+probability_4(40,3.5) #input the values given into our function
+```
+
+b) How many hours would the student in part (a) need to study to have a 50 % chance of getting an A in the class?
+
+```{r Q4 b}
+hours <- seq(40,60,1) #40 hours to 60 hours, 1 sequence
+probability_4_2 <- mapply(hours, 3.5, FUN=probability_4) #GPA of 3.5 (A)
+names(probability_4_2) <- paste(hours)
+probability_4_2
+```
+In order to get a 50%, you need to study at least 50 hours a week.
+
+## Question 5: 
+This problem has to do with odds.
+
+a) On average, what fraction of people with an odds of 0.37 of defaulting on their credit card payment will in fact default?
+```{r Q5 a}
+#can be seen with the function p(x)/1-p(x)
+0.37/(1+0.37) #odds of card being defaulted = true
+```
+
+
+b) Suppose that an individual has a 16% chance of defaulting on her credit card payment. What are the odds that she will default?
+
+```{r Q5 b}
+#can be seen with the function p(x)/1-p(x)
+.16/(1-.16) #odds of defaulting
+```
+
+
+## Question 6: 
+Download the csv file arthritis.csv. These data from Koch & Edwards (1988) from a double-blind clinical trial investigating a new treatment for rheumatoid arthritis. 
+
+a) Fit a logistic regression with the Improved as the response and Treatment, Sex and Age as predictors
+
+```{r Q6 a}
+#with logistic regression, use glm.
+treatment.factor <- as.factor(arthritis$Treatment) # == "Placebo"
+sex.factor <- as.factor(arthritis$Sex) # == "Female"
+improved.factor <- as.factor(arthritis$Improved) # == "No"
+arthritis.fit <- glm(improved.factor ~ Treatment + Sex + Age, data = arthritis, family = binomial)
+summary(arthritis.fit)
+```
+
+
+b) Use log odds to interpret the coefficients Betaˆ1, Betaˆ2, and Betaˆ3.
+
+```{r Q6 b}
+log(exp(coef(arthritis.fit)))
+```
+The interpretation of log odds ratio: The intercept here, with all predictors being involved, that the chances of being improved = yes with these factors is -3.01546086. Increasing "Improved" by 1 unit lowers the chances of improving from arthritis by a factor of -3.01546086.
+
+
+c) Use odds to interpret the coefficients Betaˆ1, Betaˆ2, and Betaˆ3.
+
+```{r Q6 c}
+exp(coef(arthritis.fit))
+```
+The interpretation of odds ratio: The intercept here, with all predictors being involved, that the chances of being improved = yes with these factors is 0.04902324. Increasing "Improved" by 1 unit raises the chances of improving from arthritis by a factor of 0.0490232.
+
+d) Construct 95% confidence intervals for the coefficients.
+
+```{r Q6 d}
+confint(arthritis.fit)
+```
+
+e) Add the interaction Sex:Age in your model. For this model, for a one year increase in age, how
+much does the log odds of some improvement (versus none) increase? Explain it separately with respect to Sex.
+
+```{r Q6 e}
+arthritis3.fit <- glm(improved.factor ~ Treatment + Sex + Age + Sex:Age, data = arthritis, family = binomial)
+#summary(arthritis3.fit)
+log(exp(coef(arthritis3.fit)))
+```
+For males, a one year increase in age increases the log odds of some improvement (versus none) by the amount given by -0.07944668
+
+For females, a one year increase in age increases the log odds of some improvement (versus none) by the amount given by 0.7734209.
+## Question 7:
+This question should be answered using the "Weekly" data set, which is part of the ISLR2 package. This data is similar in nature to the Smarket data from this chapter’s lab, except that it contains 1, 089 weekly returns for 21 years, from the beginning of 1990 to the end of 2010.
+
+a) Produce some numerical and graphical summaries of the Weekly data. Do there appear to be any patterns?
+
+```{r Q7 a}
+summary(Weekly)
+pairs(Weekly[,-9]) 
+corrplot(cor(Weekly[,-9]),method = "number")
+cor(Weekly[,-9])
+```
+From what we can observe from our correlation plot and scatter plot matrix, it appears that this data set has a high correlation between the variables 'year' and a volume of 0.84. Lags look like they don't have much of a correlation with anything. Also, it seems like volume has been increasing during the years of 1990 through around the 2010.
+
+
+b) Use the full data set to perform a logistic regression with Direction as the response and the five lag variables plus Volume as predictors. Use the summary function to print the results. Do any of the predictors appear to be statistically significant? If so, which ones?
+
+```{r Q7 b}
+weekly.fit <- glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, family = "binomial", data = Weekly)
+summary(weekly.fit)
+```
+All Lags are of negative coefficient, except Lag2. Lag2 seems to be the only statistically significant of all of predictors when it comes to predicting Direction. We fail to reject the null hypothesis, where Beta = 0 for all other variables besides Lag2. With a coefficient of 0.05844, Lag2 has an effect that means an increase in 1 in Lag2 would represent an increase of exp(0.058), which equals 1.06 in odds of Direction increasing. 
+
+c) Compute the confusion matrix and overall fraction of correct predictions. Explain what the confusion matrix is telling you about the types of mistakes made by logistic regression.
+
+```{r Q7 c}
+weekly.probs = predict(weekly.fit, type = "response")
+weekly.preds = rep("Down", length(weekly.probs))
+weekly.preds[weekly.probs > 0.5] = "Up"
+table(weekly.preds, Weekly$Direction)
+```
+We use the math: (54 + 557)/(54 + 48 + 430 + 557) to find percentage of current predictions. This equates to 0.5611. So, this means that the model predicted the weekly market trend accurately about 56% of the time. Furthermore, if separate the matrix and predict the "Up" and "Down" trends separately, we get:
+557/48 + 557 = 0.92 for "Up" and 54/430 + 54 = 0.1115 for "Down".
+
+
+d) Now fit the logistic regression model using a training data period from 1990 to 2008, with Lag2 as the only predictor. Compute the confusion matrix and the overall fraction of correct predictions for the held out data (that is, the data from 2009 and 2010).
+```{r Q7 d}
+weekly.train = Weekly[Weekly$Year < 2009,] # make training set
+weekly.test = Weekly[Weekly$Year > 2008,] # make test set
+weekly.fit.trained <- glm(Direction ~ Lag2, data = weekly.train, family = "binomial") 
+summary(weekly.fit.trained)
+
+```
+```{r Q7 d 2}
+## Confusion matrix below, follow similar structure from previous part
+test.probs = predict(weekly.fit.trained, type = "response", newdata = weekly.test)
+test.dir = Weekly$Direction[Weekly$Year > 2008]
+test.preds = rep("Down", length(test.probs))
+test.preds[test.probs>0.5] = "Up"
+table(test.preds,test.dir)
+```
+
+e) Repeat (d) using LDA.
+```{r Q7 e}
+#Should be relatively the same. Should be the same table outcome too.
+weekly.lda <- lda(Direction ~ Lag2, data = weekly.train)
+weekly.lda
+weekly.lda.pred <- predict(weekly.lda, newdata = weekly.test, type = "response")
+lda.class <- weekly.lda.pred$class
+table(lda.class, weekly.test$Direction)
+```
+
+f) Repeat (d) using QDA.
+```{r Q7 f}
+#copy paste and make it QDA
+weekly.qda <- qda(Direction ~ Lag2, data = weekly.train)
+weekly.qda
+weekly.qda.pred <- predict(weekly.qda, newdata = weekly.test, type = "response")
+qda.class <- weekly.qda.pred$class
+table(qda.class, weekly.test$Direction)
+```
+
+g) Repeat (d) using KNN with K = 1.
+```{r}
+#need to set seed when using KNN
+set.seed(0)
+#refer to KNN example code from homework 1
+train.x = cbind(weekly.train$Lag2)
+test.x = cbind(weekly.test$Lag2)
+train.x = cbind(weekly.train$Direction)
+knn.pred = knn(train.x, test.x, train.x, k=1) #set K to 1 
+table(knn.pred, weekly.test$Direction)
+```
+The model is good at predicting T Positives, not very good at predicting T Negatives. (T = True)
+
+
+i) Which of these methods appears to provide the best results on this data?
+
+As far as which methods provide the best results, it appears logistic regression and LDA. Both of their rates are about ~60%.
+
+
+j) Experiment with different combinations of predictors, including possible transformations and interactions, for each of the methods. Report the variables, method, and associated confusion matrix that appears to provide the best results on the held out data. Note that you should also experiment with values for K in the KNN classifier.
+
+
+```{r Q7 j}
+#try a new qda model maybe?
+weekly.qda2 <- qda(Direction~Lag1 + Lag2 + Lag4, data= weekly.train)
+weekly.qda2
+#use former code syntax with new qda
+weekly.qda.pred2 <- predict(weekly.qda2, newdata = weekly.test, type = "response")
+qda.class2 <- weekly.qda.pred2$class
+table(qda.class2, weekly.test$Direction)
+```
+```{r Q7 j 2}
+#try the same with a new lda
+weekly.lda2 <- lda(Direction~Lag1 + Lag2 + Lag4, data= weekly.train)
+weekly.lda2
+weekly.lda.pred2 <- predict(weekly.lda2, newdata = weekly.test, type = "response")
+lda.class2 <- weekly.lda.pred2$class
+table(lda.class2, weekly.test$Direction)
+```
+
+Neither models are significantly better than the models with Lag2 as its only predictor.
+
+## Question 8:
+In this problem, you will develop a model to predict whether a given car gets high or low gas mileage based on the Auto data set.
+
+a) Create a binary variable, mpg01, that contains a 1 if mpg contains a value above its median, and a 0 if mpg contains a value below its median. You can compute the median using the median() function. Note you may find it helpful to use the data.frame() function to create a single data set containing both mpg01 and the other Auto variables.
+
+```{r Q8 a}
+data("Auto")
+median_mpg <- median(Auto$mpg)
+mpg01 <- rep(0, length(Auto$mpg))
+mpg01[Auto$mpg > median_mpg] = 1
+Auto1 <- data.frame(Auto, mpg01)
+summary(Auto1)
+```
+
+b) Explore the data graphically in order to investigate the association between mpg01 and the other features. Which of the other features seem most likely to be useful in predicting mpg01? Scatterplots and boxplots may be useful tools to answer this question. Describe your findings.
+
+```{r Q8 b}
+corrplot(cor(Auto1[,-9]), method = "square")
+pairs(Auto1[,-9])
+```
+It appears that Cylinders, Displacement, and Weight correlate strongly with mpg01; a strong negative correlation. Furthermore, horsepower and origin have a slight correlation with mpg01. So we will include these 5 in our model.
+
+c) Split the data into a training set and a test set.
+
+```{r Q8 c}
+attach(Auto1)
+t <- (year %% 2 == 0)
+auto.train <- Auto1[t,]
+auto.test <- Auto1[-t,]
+
+```
+
+d) Perform LDA on the training data in order to predict mpg01 using the variables that seemed most associated with mpg01 in (b). What is the test error of the model obtained?
+```{r Q8 d}
+auto.lda <- lda(mpg01 ~ cylinders + displacement + weight + origin + horsepower, data = auto.train)
+auto.lda
+auto.lda.pred <- predict(auto.lda, auto.test)
+table(auto.lda.pred$class, auto.test$mpg01) #confusion matrix
+mean(auto.lda.pred$class != auto.test$mpg01) #test error
+```
+From the LDA model, the test error rate equates to be 10.48%.
+
+e) Perform QDA on the training data in order to predict mpg01 using the variables that seemed most associated with mpg01 in (b). What is the test error of the model obtained?
+```{r Q8 e}
+auto.qda <- qda(mpg01 ~ cylinders + displacement + weight + origin + horsepower, data = auto.train)
+auto.qda
+auto.qda.pred <- predict(auto.qda, auto.test)
+table(auto.qda.pred$class, auto.test$mpg01) #confusion matrix
+mean(auto.qda.pred$class != auto.test$mpg01) #test error
+```
+Using the QDA method, the model resulted in a test error rate of 10.23%. Not too far off from the LDA method.
+
+f) Perform logistic regression on the training data in order to predict mpg01 using the variables that seemed most associated with mpg01 in (b). What is the test error of the model obtained?
+```{r Q8 f}
+auto.fit <- glm(mpg01 ~ horsepower + cylinders + displacement + origin, data = auto.train, family = "binomial") # don't include year, as I didn't in part b.
+summary(auto.fit)
+auto.probs = predict(auto.fit, auto.test, type = "response")
+auto.pred = rep(0, length(auto.probs))
+auto.pred[auto.probs > 0.5] = 1
+table(auto.pred, auto.test$mpg01) #confusion matrix
+mean(auto.pred != auto.test$mpg01)
+```
+Using a logistic regression model resulted in a test error rate of 9.2%.
+
+h) Perform KNN on the training data, with several values of K, in order to predict mpg01. Use only the variables that seemed most associated with mpg01 in (b). What test errors do you obtain? Which value of K seems to perform the best on this data set?
+
+```{r Q8 h}
+train.X <-  cbind(auto.train$cylinders, auto.train$weight, auto.train$displacement, auto.train$horsepower, auto.train$origin)
+test.X <-  cbind(auto.test$cylinders, auto.test$weight, auto.test$displacement, auto.test$horsepower, auto.test$origin)
+```
+Below, we will try 4 different KNN values and see what we get.
+```{r Q8 h 2}
+set.seed(1)
+auto.knn.pred <-  knn(train.X, test.X, auto.train$mpg01, k = 1)
+mean(auto.knn.pred != auto.test$mpg01)
+auto.knn.pred2 <-  knn(train.X, test.X, auto.train$mpg01, k = 7)
+mean(auto.knn.pred2 != auto.test$mpg01) 
+auto.knn.pred3 <-  knn(train.X, test.X, auto.train$mpg01, k = 12)
+mean(auto.knn.pred3 != auto.test$mpg01) 
+auto.knn.pred4 <-  knn(train.X, test.X, auto.train$mpg01, k = 100)
+mean(auto.knn.pred4 != auto.test$mpg01) 
+```
+K = 1 seems to be likely that it'll have the lowest error rate of 7.16%. Typically, as K increases, the error rate also increases for the model.
+
+## Question 9: 
+Download the csv files zipcode_train.csv and zipcode_test.csv. Load and visualize the files using the following command lines. In the dataset, you have 1736 training images and 462 test images, where each image is a handwritten digit and it can be either 1 or 2. The description of columns is below.
+
+a) Perform logistic regression, LDA, and KNN models.
+
+```{r Q9 setup}
+train.dat <- read.csv("zipcode_train.csv")
+train.dat$Y <- as.factor(train.dat$Y)
+test.dat <- read.csv("zipcode_test.csv")
+test.dat$Y <- as.factor(test.dat$Y)
+COLORS <- c("white", "black")
+CUSTOM_COLORS <- colorRampPalette(colors = COLORS) 
+vis <- function(i){
+  par(pty = "s", mar = c(1, 1, 1, 1), xaxt = "n", yaxt = "n")
+  z <- matrix(as.numeric(train.dat[i,1:256]), 16, 16)
+  image(1:16,1:16,z[,16:1], col = CUSTOM_COLORS(256))
+}
+vis(2) # hand written 1 (from 1 to 1005)
+vis(1500) # hand written 2 (from 1006 to 1736)
+```
+
+```{r Q9 a}
+#zip.fit <- glm(data = train.dat, Y ~ ., family = binomial)
+#glm.pred <- ifelse(predict(zip.fit, newdata = test.dat) > 0.5, 1)
+#zip.matrix <- table(test.dat$Y, glm.pred)
+#test.acc <- sum(diag(zip.matrix)) / sum(zip.matrix)
+#print(1-test.acc)
+
+#what am I doing wrong with this code?
+```
+```{r Q9 a ii}
+zip.lda <- lda(Y ~ . - p16 - p32, data = train.dat)
+lda.pred <- predict(zip.lda, newdata = test.dat)
+lda.c <- lda.pred$class
+lda.matrix <- table(test.dat$Y, lda.c)
+lda.acc <- sum(diag(lda.matrix)) / sum(lda.matrix)
+1 - lda.acc
+```
+```{r Q9 a iii}
+#zip.knn <- knn(train = train.dat, test = test.dat, cl = train.dat$Y, k = 1)
+#knn.matrix <- table(zip.knn, test.dat$Y)
+#knn.acc <- sum(diag(knn.matrix)) / sum(knn.matrix)
+#1-knn.acc
+
+#what am I doing wrong with this code?
+```
+b) Using the test.dat, which of these methods appears to provide the best results on the test data?
+
+Unable to conjure up actual evidence from the code, but I can guess that knn will have best results with this classification data set. I assume it will have the lowest error
+
+
+## References
+https://www.statology.org/test-for-normality-in-r/
+https://statisticsglobe.com/calculate-leverage-statistics-r
+https://statsandr.com/blog/outliers-detection-in-r/
+https://rdrr.io/cran/car/man/ncvTest.html
+https://cran.r-project.org/web/packages/olsrr/vignettes/influence_measures.html
+https://www.statology.org/quadratic-regression-r/
+https://stats.oarc.ucla.edu/r/dae/logit-regression/
+https://stackoverflow.com/questions/47546658/logistic-regression-on-factor-error-in-evalfamilyinitialize-y-values-must
+https://stackoverflow.com/questions/41384075/r-calculate-and-interpret-odds-ratio-in-logistic-regression
+https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html#:~:text=R%20package%20corrplot%20provides%20a,legend%2C%20text%20labels%2C%20etc.
+https://www.statology.org/confusion-matrix-in-r/
+https://datascienceplus.com/how-to-perform-logistic-regression-lda-qda-in-r/
+
+
+

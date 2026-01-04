@@ -1,0 +1,628 @@
+---
+title: "STT 481 Homework 1"
+author: "Derien Weatherspoon"
+date: '2023-01-24'
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    number_sections: yes
+    toc_float: yes
+    theme: cerulean
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loading data and packages, include=FALSE}
+library(gpairs)
+library(ISLR)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(FNN)
+library(MASS)
+```
+
+## Question 3a: 
+The table below provides a training data set containing six observations, 
+three predictors, and one qualitative response variable. Suppose we wish to use 
+this data set to make a prediction for Y when X1 = 1, X2 = 0, X3 = 1 using 
+K-nearest neighbors. Compute the Euclidean distance between each observation
+and the test point, (X1, X2, X3) = (1, 0, 1).
+
+```{r Q3 a}
+euclidean_df <- data.frame(observation=c(1,2,3,4,5,6),
+                          X1 = c(0,2,0,0,1,1),
+                          X2 = c(3,0,1,1,0,1),
+                          X3 = c(0,0,3,2,1,1),
+                          Y = c("red", "red", "red", "green", "green", "red"),
+                          Euclidean_distance = c(sqrt(3*3), sqrt(2*2),sqrt(1*1+3*3), sqrt(1*1+2*2),sqrt(1*1+1*1),sqrt(1*1+1*1+1*1)))
+euclidean_df
+
+
+
+```
+
+## Question 3b: What is our prediction with K=1? Why?
+```{r Q3 b}
+ggplot(euclidean_df, aes(x = Euclidean_distance, y = 0))+
+  geom_point(aes(colour = Y))+
+  scale_color_manual(values = c( "green", "red"))+
+  xlim(0,4)
+
+
+#The nearest neighbor to the testing point (0, 0, 0) is Obs 5, (-1, 0, 1) with
+#euclidean distance of about 1.41. Obs 5 was Green, so we can predict (K = 1) 
+#that the test point is Green too.
+```
+
+## Question 3c:
+What is our prediction with K = 3? Why?
+c) The answer here is red, as most of the points on the plot made is red.
+
+## Question 3d: 
+If the Bayes decision boundary in this problem is highly nonlinear,
+then would we expect the best value for K to be large or small? Why?
+
+d) A highly nonlinear Bayes boundary suggest that there is lesser of an advantage to 
+generalizing more because of high variance, so it is best for K to be small.
+
+## Question 3e: 
+Use R to find predictions in (b) and (c).
+USE KNN Slides in NOTES
+
+## Question 4a,b:
+```{r Q4 a,b}
+college <- read.csv("College.csv")
+
+rownames(college) <- college[, 1] 
+#View(college)
+
+college <- college[, -1] 
+#View(college)
+
+```
+
+## Question 4c (i, ii, and iii):
+```{r Q4 c part 1}
+summary(college)
+#Use the pairs() function to produce a scatterplot matrix of the first ten 
+#columns or variables of the 
+#data. Recall that you can reference the first ten columns of a matrix A using
+#A[,1:10]. We change Private with as.factor, else the pairs function won't work
+college$Private <- as.factor(college$Private)
+pairs(college[,1:10])
+#use the plot() function to produce side-by-side boxplots of Outstate versus Private
+plot(college$Private, college$Outstate,
+     xlab = "Private University", ylab = "Tuition in Dollars")
+```
+
+## Question 4c (iv): 
+Create a new qualitative variable, called Elite, 
+by binning the Top10perc variable. 
+We are going to divide universities into two groups based on whether or not the 
+proportion of students coming from the top 10% of their high school classes exceeds 50%.
+(Code is given in textbook)
+```{r Q4 c part 2}
+
+Elite <- rep("No", nrow(college))
+Elite[college$Top10perc > 50] <- "Yes"
+Elite <- as.factor(Elite)
+college <- data.frame(college, Elite)
+#Use the summary() function to see how many elite universities there are. 
+#Now use the plot() function to produce side-by-side boxplots of Outstate versus Elite.
+summary(Elite)
+plot(college$Elite, college$Outstate, 
+     xlab = "Elite University", ylab = "Tuition in $")
+```
+
+
+## Question 4c (v):
+Use the hist() function to produce some histograms 
+with differing numbers of bins for a few 
+of the quantitative variables. You may find the command par(mfrow=c(2,2)) useful: 
+it will divide the print window into four regions so that four plots 
+can be made simultaneously.
+Modifying the arguments to this function will divide the screen in other ways.
+```{r Q4 c part 3}
+par(mfrow=c(2,2))
+hist(college$Apps, xlab = "Applications Received", main = "")
+hist(college$perc.alumni, col=2, xlab = "% of alumni who donate", main = "")
+hist(college$S.F.Ratio, col=3, breaks=10, xlab = "Student/faculty ratio", main = "")
+hist(college$Expend, breaks=100, xlab = "Instructional expenditure per student", main = "")
+```
+
+## Question 4c (vi):
+Continue exploring the data, and provide a brief summary of what you discover.
+```{r Q4 c part 4 (exploration)}
+#university with the max number of students in top 10% of their class
+row.names(college)[which.max(college$Top10perc)]  ##MIT
+
+#looking at out of state graduation rates and graduation rates with the number of PhD faculty
+plot(college$Outstate, college$Grad.Rate)
+plot(college$PhD, college$Grad.Rate)
+
+#which university has the highest accceptance rate
+acceptance_rate <- college$Accept / college$Apps
+row.names(college)[which.max(acceptance_rate)] # Emporia State University
+#do colleges with high acceptance rate have better graduation rates?
+plot(acceptance_rate, college$Grad.Rate) 
+
+```
+
+
+## Question 5a:
+Which of the predictors are quantitative, and which are qualitative?
+```{r Q5 a}
+auto <- na.omit(Auto)
+dim(auto)
+#summary(auto)
+#glimpse(auto)
+#the origin row doesn't look right, so after researching the data set I found out 
+#that the integers correspond to places on Earth. usa = 1, EU = 2, JP = 3
+auto$origin.factored <- factor(auto$origin, labels = c("usa", "eu", "jp")) 
+with(auto,table(origin.factored, origin))
+
+#So the qualitative variables here are origin, origin.factored, and name.
+#Everything else is quantitative.
+```
+
+## Question 5b:
+What is the range of each quantitative predictor? 
+You can answer this using the range() function.
+```{r Q5 b}
+
+#First we must group together qualitative predictors
+qualitative_columns <- which(names(auto) 
+      %in% c("name", "origin", "origin.factored"))
+qualitative_columns
+#use range on columns NOT qualitative
+sapply(auto[,-qualitative_columns],range)
+```
+
+## Question 5c: 
+What is the mean and standard deviation of each quantitative predictor?
+```{r Q5 c}
+
+sapply(auto[,-qualitative_columns],mean)
+sapply(auto[,-qualitative_columns],sd)
+```
+
+
+## Question 5d:
+Now remove the 10th through 85th observations.
+What is the range, mean, and sd of each predictor in the
+subset of the data that remains?
+```{r Q5 d}
+
+sapply(auto[-seq(10,85), -qualitative_columns], mean)
+sapply(auto[-seq(10,85), -qualitative_columns], sd)
+sapply(auto[-seq(10,85), -qualitative_columns], range)
+```
+
+## Question 5e:
+Using the full data set, investigate the predictors graphically, using 
+scatterplots or other tools of your choice. Create some plots highlighting the 
+relationships among the predictors. Comment on your findings.
+```{r Q5 e}
+
+pairs(auto[, -qualitative_columns]) #need to remove qualitative columns so the scatter plot
+#matrix doesn't look erroneous 
+
+#looking at the matrix enlarged, it looks like there are some interesting relations
+#between mpg ~ cylinders, mpg ~ weight, mpg ~ year
+with(auto, plot(mpg, cylinders)) #the more cylinders a car has, the less mpg it gets
+with(auto, plot(mpg, weight)) #the heavier a car is, the less mpg it gets, which 
+#makes sense intuitively (trucks) 
+with(auto, plot(mpg, year)) #cars start to gain efficiency over time 
+with(auto, plot(origin.factored,mpg),ylab = "miles per gallon") 
+#boxplot of mpg in different regions on Earth
+
+```
+## Question 5f:
+
+Suppose that we wish to predict gas mileage (mpg) on the basis of the other variables.
+Do your plots suggest that any of the other variables might be useful in predicting mpg? 
+Justify your answer.
+
+f) Using the plots we did in part e, it seems that all predictors are somewhat correlated 
+with mpg in some way. The predictor "name" has few observations, so even if we wanted to
+use this, it would not be wise. This would cause the data to be overfitted. 
+
+
+## Question 6a:
+Suppose we have a data set with five predictors, X1 = GPA, X2 = IQ, X3 = Level 
+(1 for College and 0 for High School), X4 = Interaction between GPA and IQ,
+and X5 = Interaction between GPA and Level. The response is starting salary 
+after graduation (in thousands of dollars). Suppose we use least squares to 
+fit the model, and get Bˆ0 = 50,Bˆ1 = 20,Bˆ2 = 0.07,Bˆ3 = 35,Bˆ4 = 0.01,Bˆ5 = -10.
+
+a) The correct option here is (iii). If IQ and GPA are fixed values, 
+then males make more on average than females, if it is 
+provided that the GPA is high enough.
+
+This due to the least squared line being 
+yhat = 50 + 20*GPA + 0.07*IQ + 35*Gender + 0.01*GPA × IQ - 10*GPA × Gender. 
+For males and females respectively, the equations become:
+
+yhat = 50 + 20*GPA + 0.07*IQ + 0.01*GPA × IQ (males)
+yhat = 85 + 10*GPA +0.07*IQ + 0.01*GPA × IQ (females)
+
+## Question 6b:
+
+Predict the salary of a college graduate with IQ of 110 and a GPA of 4.0.
+
+b) For this question, we can simply plug in the given values into the equations 
+seen above. yhat = 85 + 40 + 7.7 + 4.4 = 137.1. This gives us a starting 
+salary of 137,100 dollars.
+
+## Question 6c: 
+
+True or false: Since the coefficient for the GPA/IQ interaction term is very 
+small, there is very little evidence of an interaction effect. Justify your answer.
+
+c) The answer here is FALSE. This is false, as we would need test
+the hypothesis of Bˆ4 = 0. Find the p-value associated with t or f stat.
+Furthermore, this depends on the standard error of the beta.
+
+## Question 7a:
+
+I collect a set of data (n = 100 observations) containing a single predictor and
+a quantitative response.I then fit a linear regression model to the data, as well
+as a separate cubic regression, i.e. Y = Beta0 +Beta1X +Beta2X2 +Beta3X3 + epsilon.
+
+Suppose that the true relationship between X and Y is linear, i.e. Y = Beta0 + Beta1X + epsilon.
+Consider the training residual sum of squares (RSS) for the linear regression,
+and also the training RSS for the cubic regression. Would we expect one to be 
+lower than the other, would we expect them to be the same, or is there not
+enough information to tell? Justify your answer.
+
+a) The trained RSS will be lower than the (untrained) linear regression. The trained RSS would conform to the data better, i.e., it would make a tighter fit with th data with a wider error (epsilon).
+
+## Question 7b:
+
+Answer (a) using test rather than training RSS.
+
+b) Unlike in part a, the test RSS will be higher than the linear regression. The trained RSS will have more error than the linear regression, due to being overfitted.
+
+## Question 7c: 
+Suppose that the true relationship between X and Y is not linear, but we don’t know how far it is from linear. Consider the training RSS for the linear regression, and also the training RSS for the cubic regression. Would we expect one to be lower than the other, would we expect them to be the same, or is there not enough information to tell? Justify your answer
+
+c) The trained RSS will be lower for either cubic regression and polynomial regression. The flexible model follow points more closely and reduce the trained RSS.
+
+## Question 7d:
+
+Answer (c) using test rather than training RSS.
+
+d) We do not know the underlying distribution here. We cannot even say that it is far from linear, because we do not know. We can say that if it is far from linear, then a flexible model will do better here. And if it is close to linear, the model may be over-fitting  and result in higher test RSS.
+
+## Question 8a and 8b:
+
+This question involves the use of multiple linear regression on the Auto data set.
+
+a) Produce a scatter plot matrix which includes all of the variables in the data set.
+b) Compute the matrix of correlations between the variables using the function cor(). You will need to exclude the name variable, which is qualitative.
+```{r Q8 a,b}
+pairs(Auto) #From ISLR
+cor(subset(Auto, select = -name))
+```
+ Use the lm() function to perform a multiple linear regression with mpg as the response and all other variables except name as the predictors. Use the summary() function to print the results. Comment on the output. For instance:
+ -Is there a relationship between the predictors and the response?
+ -Which predictors appear to have a statistically significant relationship to the response?
+ -What does the coefficient for the `year` variable suggest?
+
+```{r Q8 c}
+lm.fitQ8 <-  lm(mpg ~ . - name, data = Auto)
+summary(lm.fitQ8)
+```
+i) There is a relationship between predictors and the response.
+The F-stat is far from 1, as well as having a very small p-value. This means
+the evidence is against the null hypothesis.
+ii) If we look at the p-values that are associated with each predictor's t-stat, 
+then it is simple to tell that displacement, year, origin, and weight are
+statistically significant. Cylinders, acceleration and horsepower to not have 
+the same significance.
+iii) The coefficient for year says that for every 1 year, mpg increases by the coefficient listed. Cars become more fuel efficient by that much each year.
+
+## Question 8d: 
+Use the plot() function to produce diagnostic plots of the linear regression fit. Comment on any problems you see with the fit. Do the residual plots suggest any unusually large outliers? Does the leverage plot identify any observations with unusually high leverage?
+
+```{r Q8 d}
+par(mfrow = c(2, 2))
+plot(lm.fitQ8)
+#Based on the residual vs fitted values, there is some non linearity in the data.
+#Based on the residual vs leverage plot, there are some outliers present.
+#There is also high leverage for obs greater than 5% (0.05)
+```
+## Question 8e
+Use the * and : symbols to fit linear regression models with interaction effects. 
+Do any interactions appear to be statistically significant?
+
+```{r Q8 e}
+lm.fitQ8_2 <-  lm(mpg ~ cylinders * displacement + displacement * weight, data = Auto)
+summary(lm.fitQ8_2)
+#Displacement and weight has significant interaction. Cylinders and displacement
+#not have a significant interaction.
+```
+## Question 8f:
+Try a few different transformations of the variables, such as log(X), sqrt(X), X2.
+Comment on your findings.
+
+```{r Q8 f}
+par(mfrow = c(2, 2))
+plot(log(Auto$horsepower), Auto$mpg)
+plot(sqrt(Auto$horsepower), Auto$mpg)
+plot((Auto$horsepower)^2, Auto$mpg)
+par(mfrow = c(2, 2))
+plot(log(Auto$acceleration), Auto$mpg)
+plot(sqrt(Auto$acceleration), Auto$mpg)
+plot((Auto$acceleration)^2, Auto$mpg)
+par(mfrow = c(2, 2))
+plot(log(Auto$cylinders), Auto$mpg)
+plot(sqrt(Auto$cylinders), Auto$mpg)
+plot((Auto$cylinders)^2, Auto$mpg)
+#Can't use weight, non-numeric
+  
+#Horsepower, acceleration, cylinders do not show a relationship with mpg.
+#Horsepower is the closest to being linear though
+#Residual plots indicate a few outliers.
+```
+
+## Question 9a:
+Fit a multiple regression model to predict Sales using Price,
+Urban, and US.
+
+```{r Q9 a}
+attach(Carseats)
+lm.fitQ9 <- lm(Sales ~ Price + Urban + US)
+summary(lm.fitQ9)
+```
+
+## Question 9b:
+Provide an interpretation of each coefficient in the model. Be
+careful—some of the variables in the model are qualitative!
+
+b) From the summary above: The effect of increase of 1 dollar to 'price' equates
+to a decrease in around 54 dollars in 'sales', if all everything else in the model
+remains fixed. There is no relationship between 'sales' and 'urban', this is seen
+by looking at the p-value. Lastly, 'US' shows that sales, on average in the US stores are around 1200 dollars more than a store not based in the US, again assuming all
+other predictors are fixed.
+
+## Question 9c: 
+Write out the model in equation form, being careful to handle the qualitative variables properly.
+
+c) Sales = 13.043469 - 0.054459(Price) - 0.021916(UrbanYes) +
+1.200573(USYes)
+Important to note that UrbanYes = 1 for Urban, and 0 means not Urban. Same goes 
+for USYes, 1 = US, 0 = non US stores.
+
+## Question 9d:
+For which of the predictors can you reject the null hypothesis H0 :Betaj =0?
+
+d) Price and US. Both variables have an effect on Sales.
+
+## Question 9e: 
+On the basis of your response to the previous question, fit a smaller model that only uses the predictors for which there is evidence of association with the outcome.
+```{r Q9 e}
+lm.fitQ9_2 <- lm(Sales~Price + US)
+summary(lm.fitQ9_2)
+par(mfrow = c(2, 2))
+plot(lm.fitQ9_2)
+```
+## Question 9f:
+How well do the models in (a) and (e) ﬁt the data?
+
+f) Both models have very similar R^2 values. So, around 24% of the variability 
+can be explained by the model. This means, they are not very good fits. 
+
+## Question 9g: 
+Using the model from (e), obtain 95% confidence interval for the coefficients.
+```{r Q9 g}
+confint(lm.fitQ9_2) 
+```
+## Question 9h:
+Is there evidence of outliers or high leverage observations in the model from (e)?
+
+h) Looking at the residual vs fitted plot above from (e), there seems to be some linearity in the data. Looking at the residual vs leverage plot from (e), there 
+are also some outliers. This is seen by looking at the data points outside the range
+of -2 and 2. Also, there is high leverage for observations more than 10%.
+
+
+## Question 10a:
+Perform the following commands in R:
+The last line corresponds to creating a linear model in which y is a function of x1 and x2. Write out the form of the linear model. What are the regression coefficients?
+```{r Q10 a}
+set.seed(1)
+x1 <- runif(100)
+x2 <- 0.5 * x1 + rnorm(100) / 10
+y <- 2 + 2 * x1 + 0.3 * x2 + rnorm(100)
+
+```
+The linear model is: Y = 2 + 2X_1 + 0.3X_2 + epsilon
+epsilon ~ N(0,1) r.v. The regression coefficients are 2, 2 and 0.3 respectively.
+
+## Question 10b:
+What is the correlation between “x1” and “x2” ? Create a scatterplot displaying the relationship between the variables.
+```{r Q10 b}
+cor(x1, x2)
+plot(x1,x2)
+#Strong positive correlation.
+```
+
+## Question 10c:
+Using this data, fit a least squares regression to predict y using x1 and x2. Describe the results obtained. What are Betaˆ0, Betaˆ1, and Betaˆ2? How do these relate to the true Beta0, Beta1, and Beta2? Can you reject the null hypothesis H0 : Beta1 = 0? How about the null hypothesis H0 : Beta2 = 0?
+
+```{r Q10 c}
+lm.fitQ10 <- lm(y ~ x1 + x2)
+summary(lm.fitQ10)
+```
+Betaˆ0, Beta^1, and Beta^2 respectively have the coefficients: 2.1304996, 1.43955554, and
+1.0096742. Betaˆ0 is the only one close to Beta0. The p-value is less than 0.05, we reject
+the null hypothesis for Beta1, we cannot do this for Beta2, the p-value is greater than 0.05.
+
+## Question 10d: 
+Now fit a least squares regression to predict y using only x1. Comment on your results. Can you reject the null hypothesis H0 :Beta1 = 0?
+
+```{r Q10 d}
+lm.fitQ10_2 <- lm(y~x1)
+summary(lm.fitQ10_2)
+```
+The coefficient x1 in this model is highly significant. Its p-value is very low, in this case, we can reject the null hypothesis.
+
+
+## Question 10e:
+Now fit a least squares regression to predict y using only x2. Comment on your results. Can you reject the null hypothesis H0 :Beta1 = 0?
+
+```{r Q10 e}
+lm.fitQ10_3 <- lm(y~x2)
+summary(lm.fitQ10_3)
+```
+Same thing as in part d, the coefficient x2 is very different from before. This is 
+highly significant, as the p-value is very low. Again, reject the null.
+
+## Question 10f:
+Do the results obtained in (c)-(e) contradict each other? Explain your answer.
+
+f) The results do NOT contradict each other. Predictors x1 and x2 are highly correlated, 
+this means collinearity. It is hard to determine which predictor is separately
+associated with the response variable. Collinearity reduces accuracy 
+in the regression coefficients as well. 
+
+## Question 10g:
+Now suppose we obtain one additional observation, which was unfortunately mismeasured.
+
+```{r Q10 g}
+x1 <- c(x1, 0.1)
+x2 <- c(x2, 0.8)
+y <- c(y, 6)
+lm.fitQ10_4 <- lm(y ~ x1 + x2)
+lm.fitQ10_5 <- lm(y ~ x1)
+lm.fitQ10_6 <- lm(y ~ x2)
+summary(lm.fitQ10_4)
+par(mfrow=c(2,2))
+plot(lm.fitQ10_4)
+plot(predict(lm.fitQ10_4), rstudent(lm.fitQ10_4))
+```
+```{r Q10 g 2}
+summary(lm.fitQ10_5)
+par(mfrow=c(2,2))
+plot(lm.fitQ10_5)
+plot(predict(lm.fitQ10_5), rstudent(lm.fitQ10_5))
+```
+```{r Q10g 3}
+summary(lm.fitQ10_6)
+par(mfrow=c(2,2))
+plot(lm.fitQ10_6)
+plot(predict(lm.fitQ10_6), rstudent(lm.fitQ10_6))
+```
+In the first model, x1 is not significant, in the second model it is.
+x2 is significant in both models.
+
+In the first model, both x1 and x2, the 3rd model, x2, the last point is high leverage point. Though, in the second model, x1, the last point is not high leverage.
+
+In the first model, x1 and x2, and third model, x2, the last point is not an outlier. In the second model, x1, the last point is an outlier, the point is outside abs(3).
+
+## Question 11a:
+Use KNN method with K = 10 to predict the prices.
+
+```{r Q11 a}
+#FRESH START ON 11
+library(FNN)
+library(class)
+toyota <- read.csv("toyota.csv")
+toyota_index <- data.frame(model = c("RAV4", "Camry"), year = c(2019, 2019), 
+                     transmission = c("Automatic", "Automatic"),
+                    mileage = c(12345, 50000), fuelType = c("Diesel", "Hybrid"),
+                    tax = c(150, 130), mpg = c(25, 50), engineSize = c(2,3))
+
+
+test_toyota <- rbind(toyota[,-3], toyota_index) 
+model.x <- model.matrix(~., data = test_toyota)[,-1]
+model.x <- scale(model.x) 
+ 
+x.train <- model.x[1:nrow(toyota),]
+x.test <- model.x[-(1:nrow(toyota)),]
+prediction.out <- knn.reg(train = x.train, test = x.test, y = toyota$price, k = 10)
+prediction.out$pred
+
+
+```
+## Question 11b: 
+ Use KNN method with K = 100 to predict the prices.
+```{r Q11 b}
+
+prediction.out_2 <- knn.reg(train = x.train, test = x.test, y = toyota$price, k = 100)
+prediction.out_2$pred
+
+```
+## Question 11c:
+According to bias-variance trade-off, which one is going to give higher prediction bias and lower pre-
+diction variance? Why?
+
+c) K = 100 has a higher prediction bias because it is a flexible model, which pulls 
+from more of the data. K = 10 will have a lower prediction variance because it has
+less information from the data.
+
+## Question 11d:
+Use a linear regression model to predict the prices.
+
+```{r Q11 d}
+lm.fitQ11 <- lm(data = toyota, price ~.)
+summary(lm.fitQ11)
+plot(predict(lm.fitQ11),rstudent(lm.fitQ11))
+#or
+plot(predict(lm.fitQ11))
+```
+
+## Question 11e:
+ Pick one of the coefficients in the model (d) to interpret. Which predictors are significantly important?
+
+e) The coefficient I wish to you use is mileage. Mileage is highly significant for
+the data. It is telling us that as we see an increase in price, we see a decrease
+in mileage on the car by around 6.233. Other significant predictors include fuelType,
+tax, mpg, engineSize, year, and a few more.
+
+## Question 11f: 
+Can you tell which method preforms better in terms of prediction accuracy? 
+KNN or linear regression model?
+
+
+f) Linear regression model performs better in terms of prediction accuracy.
+This is because the KNN model performs good when you have few predictors, and 
+linear model here has a R^2 value of 92%, which is very high.
+
+
+## References
+
+https://www.statology.org/euclidean-distance-in-r/
+
+
+https://search.r-project.org/CRAN/refmans/ISLR2/html/Auto.html
+
+
+https://book.stat420.org/transformations.html
+
+
+https://online.stat.psu.edu/stat462/node/260/
+
+
+https://www.statology.org/confint-r/
+
+
+https://stackoverflow.com/questions/25166624/insert-picture-table-in-r-markdown
+
+
+https://rdrr.io/cran/Rfit/man/rstudent.rfit.html
+
+
+https://www.statology.org/studentized-residuals-in-r/
+
+
+https://www.rdocumentation.org/packages/KODAMA/versions/0.0.1/topics/knn.predict
+
+
+https://www.edureka.co/blog/knn-algorithm-in-r/#Practical%20Implementation%20Of%20KNN%20Algorithm%20In%20R
+

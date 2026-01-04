@@ -1,0 +1,147 @@
+---
+title: "STT 461 HW 7"
+author: "Derien Weatherspoon"
+date: "2023-04-17"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+library(forecast)
+library(ggplot2)
+library(gpairs)
+library(GGally)
+```
+
+
+## Question 1
+
+### Take a look at the nndb dataset. Focus on the columns for protein, fat, sugar, carb, and fiber for this assignment.
+
+a) Perform k-means clustering for these fields with 4 and 8 clusters using the the algorithm from scratch (no kmeans). Repeat a few times, do you get the same cluster centers? 
+
+```{r Q1 a, 4 clusters, message=FALSE, warning=FALSE}
+nndb <- read.csv("nndb_flat.csv") #unscaled
+df <- scale(nndb[,9:13]) #scaled, called df for simplicity
+num_clus <- 4 # try 5, 6, 7, 8 too.
+max_iter <- 10
+row_samp <- sample(1:length(nndb$Protein_g), num_clus, replace = F)
+clus_loc <- df[row_samp,]
+clus_dist <- matrix(rep(0, length(nndb$Fat_g)*num_clus), nrow = length(nndb$Carb_g), ncol = num_clus)
+clus_pick <- rep(0, length(nndb$Sugar_g))
+clus_pick_old <- rep(0, length(nndb$Sugar_g))
+for(k in 1:max_iter){
+  for(i in 1:length(nndb$Protein_g)){
+    for(j in 1:num_clus)
+    {
+      clus_dist[i,j] <- sqrt((sum(df[i,] - clus_loc[j,1:5])^2))
+    }
+    clus_pick[i] = which.min(clus_dist[i,])
+  }
+  clus_loc_new <- aggregate(nndb[10:12], list(clus_pick), FUN = mean)
+}
+df_clus <- cbind(clus_pick, nndb)
+ggpairs(nndb[,9:13], mapping = ggplot2::aes(color = as.factor(clus_pick)))
+```
+You get mostly the same clustering.
+
+b) Next, use k-means clustering using the kmeans command. Try from 2 to 10 clusters. For how many of these cluster numbers do you get the same centers after repeating kmeans (for each number do 3 iterations of kmeans)?
+
+```{r Q1 b}
+cluster_results <- list()
+for (i in 2:10) {
+  cluster_results[[i]] <- kmeans(df, centers = i, iter.max = 10)
+}
+# Check for the same centers after repeating kmeans
+same_centers <- c()
+for (i in 2:10) {
+  if (all(cluster_results[[i]]$centers == cluster_results[[i]]$centers)) {
+    same_centers <- c(same_centers, i)
+  }
+}
+same_centers
+```
+All centers.
+
+c) Take the highest number of clusters for which kmeans gives a consistent response (same centers after repeating). Look at the food names and groups for the data in each cluster. Can you give a verbal description of each cluster, based on the names?
+
+```{r Q1 c}
+max(same_centers)
+```
+
+d) Perform a linear regression, predicting calories based on these 5 inputs for the entire dataset. Then do separate regression models for each of the clusters in (c), keeping only significant terms for each. How do the models compare (accuracy, adjusted R^2, etc.)?
+
+```{r Q1 d}
+model <- lm(Energy_kcal ~ Protein_g + Fat_g + Carb_g + Sugar_g + Fiber_g, data = nndb)
+#summary(model)
+model_2 <- lm(Energy_kcal ~ Protein_g + Fat_g + Carb_g + Fiber_g, data = nndb) # remove sugar, not significant
+summary(model_2)
+```
+
+## Question 2
+
+### For the gas data in the oil gas dataset
+
+a) Perform trend/seasonality decomposition, comparing additive and multiplicative decompositions. Which one look better?
+
+```{r Q2 a}
+df2 <- read.csv("oil-gas.csv")
+oil_ts <- ts(df2$Gas, start = c(2013,1), frequency = 12)
+oil_additive <- decompose(oil_ts, type = "additive")
+oil_multiplicative <- decompose(oil_ts, type = "multiplicative")
+plot(oil_additive)
+plot(oil_multiplicative)
+```
+
+b)  Create forecasts for the gas data, with:
+i. naïve
+ii. seasonal naïve
+iii. simple exponential smooth
+iv. Holt
+
+```{r Q2 b}
+
+oil_naive <- naive(oil_ts)
+plot(oil_naive)
+
+oil_seasonal_naive <- snaive(oil_ts, h = 12)
+plot(oil_seasonal_naive)
+
+oil_ses <- ses(oil_ts)
+plot(oil_ses)
+
+oil_holt <- holt(oil_ts)
+plot(oil_holt)
+```
+
+c) Calculate the MAPE’s for each of the models in (b). Which fits the best?
+
+```{r Q2 c}
+mean(abs(oil_naive$residuals)/oil_ts) #naive mape
+mean(abs(oil_seasonal_naive$residuals)/oil_ts) #seasonal mape
+mean(abs(oil_ses$residuals)/oil_ts) # ses mape
+mean(abs(oil_holt$residuals)/oil_ts) # holt mape
+```
+The ses mape is the best.
+
+d) Create a plot of the best forecast along with the fitted values to show the fit.
+
+```{r Q2 d}
+plot(oil_ses)
+lines(oil_ses$fitted)
+```
+
+e) Create a lagged regression model, using oil to predict gas. How does the MAPE compare to the previous models?
+
+```{r Q2 e, message=FALSE, warning=FALSE}
+# lagged regression model
+lagged <- lm(Gas ~ lag(Oil, 1), data = df2)
+summary(lagged)
+
+mape <- mean(abs((df2$Gas - predict(lagged))/df2$Gas))
+mape
+```
+

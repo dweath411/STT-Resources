@@ -1,0 +1,187 @@
+---
+title: "STT 459 Project"
+author: "Derien Weatherspoon, Alejandro Dopp, Cameron Merritt, Jacob Ohanian"
+date: "2023-04-19"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Packages
+
+```{r packages, message=FALSE}
+library(ggcorrplot)
+library(numDeriv)
+library(gam)
+library(writexl)
+```
+
+## Splitting the Data
+
+```{r data}
+set.seed(1)
+df <- read.csv("SwedishMotorInsurance.csv")
+train <- sample(nrow(df), 1500, replace = F)
+df.train <- df[train,]
+df.validate <- df[-train,]
+```
+
+## Summary Stats of Data
+
+#### Dimensions
+
+```{r dim}
+dim(df)
+dim(df.train)
+dim(df.validate)
+num <- nrow(df)
+```
+
+#### Summary
+
+```{r}
+summary(df.train)
+summary(df.validate)
+```
+
+
+#### Correlation
+
+```{r corrplot}
+numerics <- df[,c("Payment","Claims","Insured","Bonus")]
+ggcorrplot(cor(numerics), lab_size = 1.5, tl.cex = 5, lab = T, title = "correlation plot", hc.order = T)
+```
+
+#### Fitting histogram
+
+```{r}
+par(mfrow = c(1,2))
+hist(log(df$Payment), 100, col = "blue", main = "Histogram of Log fitted Payments", xlab = "Log fitted Payments")
+hist(df$Payment, 100, col = "green", main = "Histogram of Payments", xlab = "Payments") 
+```
+ Notice with out log applied to Payment it does not properly distribute.
+ 
+## MLE 
+
+```{r MLE}
+
+trainsub <- subset(df.train, Claims > 0)
+avg <- trainsub$Payment / trainsub$Claims
+n <- length(avg)
+
+# MLE for severity model
+lik <- function(param) {
+  theta <- param[1]
+  LogLik <- -log(theta) - avg/theta
+  return(-sum(LogLik))
+}
+
+op <- nlminb(1, lik, lower=c(0.0000001))
+op$par
+theta <- op$par[1]
+negativeHessian <- hessian(lik,theta) 
+sd <- sqrt(solve(negativeHessian))
+c(theta-sd*1.96 , theta+sd*1.96)
+sd
+
+# See how good the fit is.
+hist(avg,100,freq=FALSE, main="Distribution fit")
+lines(density(rexp(10^6,rate=1/theta)),col="blue",lwd=2)
+legend("topright", c("Exponential"), 
+       col=c("blue"), lwd=c(2,2))
+
+
+severity_model_mle <-glm(avg ~ 1, data = trainsub, family = Gamma(link = "log"))
+exp(severity_model_mle$coefficients)
+```
+
+
+```{r}
+# Try fitting a gamma distribution to get a better fit.
+lik2 <- function(param) {
+  shape <- param[1]
+  scale <- param[2]
+  LogLik <- dgamma(avg, shape=shape, scale=scale, log=TRUE)
+  return(-sum(LogLik))
+}
+op2 <- nlminb(c(1,1), lik2, lower=c(0.0000001,0.0000001))
+
+op2$par
+
+# See how good the fit is for the gamma.
+hist(avg,100,freq=FALSE, main="Distribution fit")
+lines(density(rgamma(10^6, shape=op2$par[1], 
+                     scale=op2$par[2])),col="red",lwd=2)
+legend("topright", c("Gamma"), 
+       col=c("red"), lwd=c(2,2))
+
+```
+ 
+## Building the severity model
+
+```{r}
+hist(log(avg), col = "blue", main = "Histogram of Log fitted Average Claim Amount", xlab = "Log fitted Average Claim Amount")
+hist(avg, col = "dark green", main = "Histogram of Average Claim Amount", xlab = "Average Claim Amount")
+severity_model <- glm(avg ~ log(Payment), data = trainsub, family = Gamma(link = "log"))
+summary(severity_model)
+severity_model_mle <-glm(avg ~ 1, data = trainsub, family = Gamma(link = "log"))
+
+
+df.validate$sevpred <- exp(severity_model$coefficients[1] + severity_model$coefficients[2] * log(df.validate$Payment))
+sevpred2 <- predict(severity_model, newdata = df.validate, type = "response")
+severity_model$aic
+
+
+severity_model_mle <-glm(avg ~ 1, data = trainsub, family = Gamma(link = "log"))
+exp(severity_model_mle$coefficients[1]) # using MLE
+
+
+severity_model_test <- severity_model <- glm(avg ~ log(Insured), data = trainsub, family = Gamma(link = "log"))
+
+```
+
+## Building the frequency model
+
+```{r frequency}
+freqglm <- glm(Claims ~ log(Insured), data = df, family = poisson(link = "log"))
+summary(freqglm)
+
+df.validate$freqpred <- predict(freqglm, newdata = df.validate, type = "response")
+plot(log(df.validate$freqpred+1),log(df.validate$Claims+1))
+abline(0,1, col = "red")
+
+# Estimate the standard errors.
+#I <- hessian(lik, op$par) 
+#sd <- sqrt(diag(solve(I)))
+
+```
+Everything above the line is the insurance company losing money, whereas everything below is when the company is making profit.
+
+## Frequency-Severity model
+
+```{r freq-sev model}
+df.validate$bothpred <- df.validate$freqpred * df.validate$sevpred
+
+plot(log(df.validate$bothpred+1), log(df.validate$Payment+1))
+abline(0,1, col = "green")
+head(df.validate$bothpred)
+
+```
+```{r rate}
+freqglm <- glm(Claims ~ log(Insured), data = df, family = poisson(link = "log"))
+severity_model <- glm(avg ~ log(Insured), data = trainsub, family = Gamma(link = "log"))
+df.validate$validated_freq <- predict(freqglm, newdata = df.validate, type = "response")
+df.validate$validated_sev <- predict(severity_model, newdata = df.validate, type = "response")
+df.validate$validated_rate <- (df.validate$validated_freq * df.validate$validated_sev) / df.validate$Insured
+df.validate
+```
+
+
+```{r}
+#write_xlsx(df.validate,"rating engine final v2.xlsx")
+```
+

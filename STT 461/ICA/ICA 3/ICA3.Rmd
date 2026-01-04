@@ -1,0 +1,66 @@
+---
+title: "ICA 3"
+author: "Derien Weatherspoon"
+date: '2023-02-01'
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#d and p norm functions
+```{r Q1}
+#A player has a 30% chance of winning a particular game. Suppose a particular player plays the game 10 times.
+#a. What is the probability of the player winning exactly twice?
+#b. What is the probability of the player winning more than 4 times?
+
+a1 <- dbinom(2,10,.3)
+b1 <- 1-pbinom(3,10,.3)
+a1
+b1
+#So p = .3, n = 10, number of successes is twice and 
+```
+
+
+
+```{r Q2}
+#An urn has 5 red balls, 2 green balls, and 3 yellow balls. If 3 balls are drawn without replacement,
+#a. What is the probability that exactly 2 are red?
+#b. What is the probability that at most 1 is yellow?
+
+a2 <- dhyper(2,5,5,3)
+a2
+b2 <- phyper(1,3,7,3)
+b2
+
+```
+
+```{r Q3}
+#Customers are entering a store at a rate of 1 every 4 minutes.
+#a. What is the probability that at least 2 customers come in the store in the next 10 minutes?
+#b. Once a customer enters, find the probability that it will take more than 8 minutes for another customer to arrive.
+
+a3 <- 1-ppois(2, 0.25*10)
+a3
+b3 <- dpois(0,2) #2 because it is 1 customer every 4 minutes, so it is 2 customers in an 8 minute interval
+b3
+
+```
+
+```{r Q4}
+#The silicon wafers produced at a semiconductor plant have a flatness deviation which fit a normal distribution with mean 10.0 μm with standard deviation 2.5 μm. If the wafer has a deviation greater than 16.7 μm, it is defective. The automated quality control system can detect if the deviation is greater than 17.0 μm.
+#a. What is the probability that a wafer is defective?
+#b. What is the probability that the quality control system will detect a defect in any wafer?
+#c. What is the probability that a wafer is defective, given that the quality control system does not detect the defect? ##ratio of 2 probabilities
+
+a4 <- 1-pnorm(16.7,10,2.5)
+a4
+b4 <- 1-pnorm(17,10,2.5)
+b4
+c4 <- 1-pnorm(16.7,10,2.5) - (1-pnorm(17,10,2.5))
+c4
+```

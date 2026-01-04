@@ -1,0 +1,253 @@
+---
+title: "Inference problems"
+author: 'Derien W '
+date: "M5 ICA4"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    number_sections: no
+    df_print: paged
+---
+
+<style type="text/css">
+/* Title */
+h1.title {
+  color: #3A2C29;
+  font-size:60px;
+  font-weight: bold;
+}
+/* Level 1 header */
+h1 {
+  color: #3A2C29;
+}
+/* Level 2 header */
+h2 {
+  color: #C9C675;
+}
+/* Table of contents */
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    z-index: 2;
+    color: #fff;
+    background-color: #C9C675;
+    border-color: #337ab7;
+</style>
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      error = TRUE,
+                      message = FALSE, 
+                      warning = FALSE,
+                      comment = NA)
+set.seed(3122019)
+```
+
+# Introduction
+
+Quantities $\bar{x}$ and $\hat{p}$ are good point estimates for the population 
+mean and population proportion, respectively. They are used in estimation and 
+hypothesis testing. These point estimates vary 
+from one sample to another. We will use package `infer` to get a deeper understanding of bothsimulation-based and theoritical inference. To get started, load packages `tidyverse` and `infer`.
+
+```{r packages}
+library(tidyverse)
+library(infer)
+
+```
+
+Below is a basic custom theme. Feel free to try it out when you use `ggplot()`.
+Simply add it as layer to your plot. Rather than using `theme_bw()` you can
+use `theme_custom()`. This custom theme increases the font point size on axes
+and their labels.
+
+```{r theme-custom}
+theme_custom <- function() {
+  theme_bw() +
+  theme(axis.title = element_text(size = 16), 
+        title = element_text(size = 20),
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12),
+        plot.caption = element_text(size = 10))
+}
+```
+
+# Inference on population proportion
+
+The American Automobile Association claims that 54% of fatal car/truck
+accidents are caused by driver error. A researcher studies 35 randomly 
+selected accidents and finds that 14 were caused by driver error. Test the claim 
+at significance level of $\alpha$= 0.05.
+
+## Hypotheses
+
+State the null and alternative hypotheses given the problem above.
+#Our claim is that the null hypothesis is: p = 0.54, and the alternative hypothesis is: p =/= 0.54
+
+
+
+## Simulation-based inference
+
+Below we create a data set to use with package `infer`. We will create
+a data frame `driver` that has "yes" or "no" outcomes with regards to the 
+question: Was the accident caused due to driver error?
+
+```{r shelter, echo=FALSE}
+# create data frame shelter
+driver <- as_tibble(rep(x = c("no", "yes"), times = c(21, 14)))
+
+# verify 53% are yes as per the survey results from above
+driver %>% 
+  group_by(value) %>% 
+  summarise(proportion = n() / nrow(driver))
+```
+
+### Simulated null distribution
+Simulate the null distribution using a sequence of functions from package
+`infer`. Follow the template in the notes, previous assignments, andtake a look at the help for
+each function. Plot a histogram of the null distribution and place a 
+vertical line at the value of the observed sample proportion of 0.4.
+
+```{r null-dist}
+null.dist <- driver %>%
+  specify(response = value, success = "yes") %>%
+  hypothesise(null = "point", p = 0.54) %>%
+  generate(reps = 10000, type = "simulate") %>%
+  calculate(stat = "prop") 
+```
+
+```{r null-plot}
+ggplot(null.dist, aes(stat)) + geom_histogram() + geom_vline(xintercept = 0.4) + theme_custom()
+```
+
+### Compute the p-value
+
+Use the simulated null distribution to compute the p-value. Recall that the
+p-value is the probability of observing data at least as
+favorable to the alternative hypothesis as our current data set, given
+that the null hypothesis is true.
+
+```{r p-value}
+null.dist %>%
+  filter(stat <=0.4) %>%
+  summarise(p_value=2*n()/nrow(null.dist))
+```
+
+### Conclusion from the hypothesis testing
+
+State your conclusion to "Does this provide convincing evidence that 54% of fatal car/truck
+accidents are caused by driver error", at the 5% 
+significance level? 
+
+Will your conclusion change if the testing was done at the 1% significance level?"
+#Yes it would change if it was done at 1%. There would be a smaller distribution
+
+### Explore the plausible values: Confidence interval
+
+Compute a 95% confidence interval for the proportion of all 
+accidents caused due to driver error.
+You may assume all the necessary assumptions are satisfied.
+
+```{r 95ConfidenceInterval}
+boot.means <- driver %>%
+  specify(response = value, success = "yes") %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "prop")
+boot.means %>%
+  summarise(lower95 = quantile(stat, probs = .025),
+            upper95 = quantile(stat, probs = .975))
+```
+
+Compare the 95% confidence interval with the 99% confidence interval.
+```{r 99CI}
+boot.means %>%
+summarise(lower95 = quantile(stat, probs = .025), 
+          upper95 = quantile(stat, probs = .975), 
+          lower99 = quantile(stat, probs = 0.005),
+          upper99 = quantile(stat, probs = .995))
+```
+
+### Hypothesis testing and Confidence interval
+
+Does the confidence interval constructed in the previous example reflect the results obtained from the hypothesis testing? Justify your answer in 2-5 sentences.
+# The confidence interval constructed does reflect the hypothesis testing. We can say with 95% that the interval (0.22,0.57) captures the proportion of accidents caused due to driver error.
+
+# Inference on population mean
+
+A certain chemical pollutant in the Genesee River has been constant for several years with mean μ = 34 ppm (parts per million) and standard deviation σ = 8 ppm.   A group of factory representatives whose companies discharge liquids into the river is now claiming that they have lowered the average with improved filtration devices. A group of environmentalists will test to see if this is true at the *4%* level of significance.   Assume that their sample of size 50 gives a mean of 32.5 ppm.  Perform a hypothesis test at the 4% level of significance and state your conclusion. 
+
+### Hypotheses
+
+State the null and alternative hypotheses given the problem above.
+
+#Null hypothesis: mu = 0.34, Alternative hypothesis: mu =/= 0.34
+
+
+### Simulated null distribution
+
+Plot a histogram of the simulated null distribution and place a 
+vertical line at the value of the observed sample mean.
+```{r}
+population <- tibble(value = rnorm(n = 1000000, mean = 34, sd = 8))
+
+sample.means <- population %>% 
+  infer::rep_sample_n(size = 50, replace = TRUE, reps = 10000) 
+
+x_bar_reps<-sample.means%>% 
+  group_by(replicate) %>% 
+  summarise(x_bar = mean(value))
+
+# Graphs sampling distribution
+x_bar_reps %>% 
+  ggplot(mapping = aes(x = x_bar)) +
+  geom_histogram(bins = 20, fill = "lightblue", color = "black") +
+  geom_vline(xintercept = 32.5, color = "black") 
+```
+
+### Compute the p-value
+
+Use the simulated null distribution to compute the p-value. Recall that the
+p-value is the probability of observing data at least as
+favorable to the alternative hypothesis as the current data set, given
+that the null hypothesis is true.
+NOTE: For this section you will first have to generate the population and then randomly generate samples (maybe 1000) of size 50, calcualte the means and then plot the sampling distribution.
+
+```{r}
+x_bar_reps %>% 
+  filter(x_bar <= 32.5) %>% 
+  summarize(p.value = n()/nrow(x_bar_reps))
+
+```
+### Conclusion from the hypothesis testing
+
+Perform a hypothesis test to determine if there  convincing evidence 
+to go with the factory representatives claim. Use a 4% significance level?
+
+Will your conclusion change if the testing was done at the 1% significance level?"
+#Since the p-value is greater than alpha we fail to reject the null hypothesis. This would not change if testind was done at 1%.
+
+### Explore the plausible values: Confidence interval
+
+### Confidence interval 
+
+Compute a 96% and 99% confidence interval for the average chemical pollutant in the Genesee River.
+You may assume all the necessary assumptions are satisfied.
+   
+```{r CI}
+x_bar_reps %>% 
+  summarise(lower96 = quantile(x_bar, probs = .02),
+            upper96 = quantile(x_bar, probs = .98),
+            lower99 = quantile(x_bar, probs = .005),
+            upper99 = quantile(x_bar, probs = .995))
+```
+
+# References
+
+1. https://cran.r-project.org/web/packages/infer/vignettes/flights_examples.html
+
+2. http://math.oxford.emory.edu/site/math117/probSetHypothesisTestsOneProportion2/

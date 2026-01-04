@@ -1,0 +1,141 @@
+---
+title: "SS23 STT481: Lab: Classification"
+subtitle: "02/20/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+``` {r echo=TRUE}
+library(ISLR)
+names(Smarket)
+summary(Smarket)
+pairs(Smarket, col = Smarket$Direction)
+```
+
+Divide the dataset into training data set (year from 2001 - 2004) and test data set (year 2005)
+``` {r echo=TRUE}
+train <- (Smarket$Year < 2005)
+Smarket.train <- Smarket[train,]
+dim(Smarket.train) 
+Smarket.test <- Smarket[!train ,]
+dim(Smarket.test) 
+Direction.test <- Smarket$Direction[!train]
+```
+
+** Goal **: predict `Direction` using `Lag1` through `Lag5` and `Volume`. 
+
+# Logistic Regression
+``` {r echo=TRUE}
+glm.fit <- glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume , data = Smarket.train, 
+               family = binomial)
+summary(glm.fit)
+```
+The smallest p-value here is associated with `Lag1`. The negative coefficient for this predictor suggests that if the market had a positive return yesterday, then it is less likely to go up today. However, at a value of 0.295, the p-value is still relatively large, and so there is no clear evidence of a real association between `Lag1` and `Direction`.
+
+
+## Coefficients and prediction
+``` {r echo=TRUE}
+coef(glm.fit)
+summary(glm.fit)$coef
+glm.probs <- predict(glm.fit, newdata = Smarket.test, 
+                     type = "response") # posterior probabilities
+glm.probs[1:10]   ## probability that Y belongs to 1
+contrasts(Smarket$Direction)
+```
+
+Predict whether the market will go up or down using threshold 0.5.
+``` {r echo=TRUE, fig.height = 3}
+glm.pred <- rep("Down", nrow(Smarket.test))
+glm.pred[glm.probs >.5] <- "Up"
+```
+
+## Confusion matrix 
+``` {r echo=TRUE}
+table(glm.pred, Direction.test)
+(97+34)/nrow(Smarket.test) # overall error rate
+```
+The test error rate is 52%, which is worse than random guessing!
+
+We recall that the logistic regression model had very underwhelming p-values associated with all of the predictors, and that the smallest p-value, though not very small, corresponded to `Lag1`. Perhaps by removing the variables that appear not to be helpful in predicting `Direction`, we can obtain a more effective model. After all, using predictors that have no relationship with the response tends to cause a deterioration in the test error rate (since such predictors cause an increase in variance without a corresponding decrease in bias), and so removing such predictors may in turn yield an improvement. Below we have refit the logistic regression using just `Lag1` and `Lag2`, which seemed to have the highest predictive power in the original logistic regression model.
+
+## Remove `Lag3`, `Lag4`, `Lag5`, and `Volume`
+``` {r echo=TRUE}
+glm.fit <- glm(Direction ~ Lag1 + Lag2, data = Smarket.train, family = binomial)
+glm.probs <- predict(glm.fit, newdata = Smarket.test, 
+                     type = "response") # posterior probabilities
+glm.pred <- rep("Down", nrow(Smarket.test))
+glm.pred[glm.probs >.5] <- "Up"
+table(glm.pred, Direction.test)
+(35+76)/nrow(Smarket.test) # overall error rate
+```
+
+Now the results appear to be more promising: 56% of the daily movements have been correctly predicted.
+
+# Linear Discriminant Analysis
+
+``` {r echo=TRUE}
+library(MASS)
+lda.fit <- lda(Direction ~ Lag1 + Lag2, data = Smarket.train)
+lda.fit
+```
+
+``` {r echo=TRUE}
+lda.pred <- predict(lda.fit, Smarket.test)
+names(lda.pred)
+lda.class <- lda.pred$class
+table(lda.class, Direction.test)
+mean(lda.class != Direction.test)
+```
+
+# Quadratic Discriminant Analysis
+
+``` {r echo=TRUE}
+library(MASS)
+qda.fit <- qda(Direction ~ Lag1 + Lag2, data = Smarket.train)
+qda.fit
+```
+
+``` {r echo=TRUE}
+qda.pred <- predict(qda.fit, Smarket.test)
+names(qda.pred)
+qda.class <- qda.pred$class
+table(qda.class, Direction.test)
+mean(qda.class != Direction.test)
+```
+
+Interestingly, the QDA predictions are accurate almost 60% of the time, even though the 2005 data was not used to fit the model. This level of accuracy is quite impressive for stock market data, which is known to be quite hard to model accurately. This suggests that the quadratic form assumed by QDA may capture the true relationship more accurately than the linear forms assumed by LDA and logistic regression. However, we recommend evaluating this method’s performance on a larger test set before betting that this approach will consistently beat the market!
+
+# K-Nearest Neighbors
+
+``` {r echo=TRUE}
+library(class)
+knn.pred <- knn(Smarket.train[,c("Lag1", "Lag2")], Smarket.test[,c("Lag1", "Lag2")],
+                Smarket.train$Direction, k = 1)
+table(knn.pred, Direction.test)
+mean(knn.pred != Direction.test)
+```
+
+``` {r echo=TRUE}
+knn.pred <- knn(Smarket.train[,c("Lag1", "Lag2")], Smarket.test[,c("Lag1", "Lag2")],
+                Smarket.train$Direction, k = 3)
+table(knn.pred, Direction.test)
+mean(knn.pred != Direction.test)
+```
+
+The results have improved slightly. But increasing $K$ further turns out to provide no further improvements. It appears that for this data, QDA provides the best results of the methods that we have examined so far.
+
+## Standardize
+``` {r echo=TRUE}
+standardized.X <- scale(rbind(Smarket.train[,c("Lag1", "Lag2")], Smarket.test[,c("Lag1", "Lag2")]))
+apply(standardized.X, 2, mean)
+apply(standardized.X, 2, var)
+Smarket.train[,c("Lag1", "Lag2")] <- standardized.X[1:nrow(Smarket.train),]
+Smarket.test[,c("Lag1", "Lag2")] <- standardized.X[(nrow(Smarket.train)+1):nrow(standardized.X),]
+knn.pred <- knn(Smarket.train[,c("Lag1", "Lag2")], Smarket.test[,c("Lag1", "Lag2")],
+                Smarket.train$Direction, k = 3)
+table(knn.pred, Direction.test)
+mean(knn.pred != Direction.test)
+```

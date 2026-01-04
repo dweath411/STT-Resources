@@ -1,0 +1,244 @@
+---
+title: "STT 461 HW 4"
+author: "Derien Weatherspoon"
+date: "2023-03-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r libraries}
+library(ggplot2)
+library(pwr)
+library(boot)
+library(DirichletReg)
+library(bayesboot)
+library(infer)
+library(MASS)
+library(dplyr)
+cm <- read.csv("cars_multi.csv")
+```
+
+## Question 1
+Suppose a 100-item sample which is drawn from a binomial distribution with n = 50 has mean value 30.7. Construct a simulation to determine whether we can say at a 99% that the p parameter is greater than 0.6.
+
+```{r}
+n <- 50
+mean <- 30.7
+set.seed(123)
+samples <- replicate(10000, rbinom(100, n, 0.6))
+sample_means <- apply(samples, 2, mean)
+p_value <- mean(sample_means >= 30.7)
+p_value
+```
+We can reject the null hypothesis.
+
+## Question 2
+
+Suppose a sample is to be drawn from a normally-distributed population to disprove a null hypothesis that the mean value is 500. For samples that have a standard deviation of 30, create powers curves for n = 10, 20, and 50, with the graphs extending for effect sizes from 0 to 1.
+
+```{r Q2}
+# n = 10
+stddev <- 30
+H0mean <- 500
+truemean <- seq(H0mean, H0mean + stddev, by = 0.001*stddev)
+n <- 10
+alpha <- 1 - .95
+stderror <- stddev/sqrt(n)
+pwr <- rep(0,length(truemean))
+for(i in 1:length(truemean)){
+  meansim <- rep(0,1000)
+  for(j in 1:1000){
+    simsamp <- truemean[i] + stddev * rt(n, n - 1)
+    meansim[j] <- mean(simsamp)
+  }
+  pwr[i] <- 1 - sum(pt(abs(meansim - H0mean)/stderror, n - 1) < (1-alpha)/2 + 0.5)/1000
+}
+powerdf <- data.frame('TrueMean' = truemean, 'Power' = pwr)
+ggplot(data = powerdf, aes(x = TrueMean, y = Power)) +geom_point()
+```
+
+```{r Q2 1}
+# n = 20
+stddev <- 30
+H0mean <- 500
+truemean <- seq(H0mean, H0mean + stddev, by = 0.001*stddev)
+n <- 20
+alpha <- 1 - .95
+stderror <- stddev/sqrt(n)
+pwr <- rep(0,length(truemean))
+for(i in 1:length(truemean)){
+  meansim <- rep(0,1000)
+  for(j in 1:1000){
+    simsamp <- truemean[i] + stddev * rt(n, n - 1)
+    meansim[j] <- mean(simsamp)
+  }
+  pwr[i] <- 1 - sum(pt(abs(meansim - H0mean)/stderror, n - 1) < (1-alpha)/2 + 0.5)/1000
+}
+powerdf <- data.frame('TrueMean' = truemean, 'Power' = pwr)
+ggplot(data = powerdf, aes(x = TrueMean, y = Power)) +geom_point()
+```
+
+
+
+```{r Q2 2}
+# n = 50
+stddev <- 30
+H0mean <- 500
+truemean <- seq(H0mean, H0mean + stddev, by = 0.001*stddev)
+n <- 50
+alpha <- 1 - .95
+stderror <- stddev/sqrt(n)
+pwr <- rep(0,length(truemean))
+for(i in 1:length(truemean)){
+  meansim <- rep(0,1000)
+  for(j in 1:1000){
+    simsamp <- truemean[i] + stddev * rt(n, n - 1)
+    meansim[j] <- mean(simsamp)
+  }
+  pwr[i] <- 1 - sum(pt(abs(meansim - H0mean)/stderror, n - 1) < (1-alpha)/2 + 0.5)/1000
+}
+powerdf <- data.frame('TrueMean' = truemean, 'Power' = pwr)
+ggplot(data = powerdf, aes(x = TrueMean, y = Power)) +geom_point()
+```
+
+
+## Question 4
+With the weight field in the cars_multi dataset, use (i) standard bootstrapping, and (ii) weighted Bayesian bootstrapping with the Dirichlet distribution to create 95% confidence intervals for
+(a) the mean
+(b) the 95th quantile
+(c) the standard deviation
+Also compare the confidence interval for mean to what you would get with using the t distribution.
+```{r 4 i}
+
+weightmean <- rep(0,10000)
+weight95 <- rep(0,10000)
+weightsd <- rep(0,10000)
+for(i in 1:10000){
+  weightsamp <- sample(cm$weight, length(cm$weight), replace = TRUE)
+  weightmean[i] <- mean(weightsamp)
+  weight95[i] <- quantile(weightsamp, 0.95)
+  weightsd[i] <- sd(weightsamp)
+}
+quantile(weightmean, c(0.025, 0.975))
+quantile(weight95, c(0.025, 0.975))
+quantile(weightsd, c(0.025, 0.975))
+hist(weightsd, breaks = 30)
+hist(weightmean)
+hist(weight95)
+
+```
+
+```{r 4 ii}
+weight <- rep(0,length(cm$weight))
+weightmeanbayes <- rep(0,10000)
+weight95bayes <- rep(0,10000)
+weightsdbayes <- rep(0,10000)
+for(i in 1:10000){
+  weight <- rdirichlet(1, rep(1,length(cm$weight)))
+  weightsampbayes <- sample(cm$weight, length(cm$weight), prob = weight, replace = TRUE)
+  weightmeanbayes[i] <- mean(weightsampbayes)
+  weight95bayes[i] <- quantile(weightsampbayes, 0.95)
+  weightsdbayes[i] <- sd(weightsampbayes)
+}
+quantile(weightmeanbayes, c(0.025, 0.975))
+quantile(weight95bayes, c(0.025, 0.975))
+quantile(weightsdbayes, c(0.025, 0.975))
+hist(weightsdbayes, breaks = 30)
+hist(weightmeanbayes)
+hist(weight95bayes)
+```
+
+## Question 5
+Take a bivariate normal distribution with two random variables X and Y, with mean value = (1, -1), var(X) = 3, var(Y) = 6, and cor(X,Y) = -0.5.
+(a) create a contour plot for this data
+```{r 5a}
+# set values first
+mu <- c(1, -1)
+varX <- 3
+varY <- 6
+corXY <- -0.5
+# create cov matrix
+cov_matrix <- matrix(c(varX, corXY, corXY, varY), nrow = 2)
+
+#the distribution
+biv_norm <- mvrnorm(1000, mu, matrix(c(varX, corXY, corXY, varY), 2))
+contour(biv_norm) #definitely wrog
+```
+
+(b) plot 1,000 simulations of this distribution 
+
+```{r 5b}
+# plot 1000 simulations
+sim <- mvrnorm(1000, mu, cov_matrix)
+plot(sim)
+```
+
+(c)Using 1,000,000 simulations,
+(i) Verify that var(X + Y) = var(X) + var(Y) + 2Cov(X, Y) 
+(ii) find:
+(1) the expected value of Y
+(2) the expected value of Y, given that X > 2
+(3) the expected value of Y, given that X = 2
+```{r 5c}
+# 1,000,000 simulations
+sim1M <- mvrnorm(1000000, mu, matrix(c(varX, corXY, corXY, varY), 2))
+
+# sum of X and Y
+sumXY <- rowSums(sim1M)
+
+# variance of X + Y
+varSumXY <- var(sumXY)
+
+# variance of X and Y
+varXY <- varX + varY + 2 * corXY
+
+# var(X + Y) = var(X) + var(Y) + 2Cov(X, Y) , verify if they do or don't
+varSumXY == varXY
+
+# expected value of Y
+muY <- mu[2]
+muY
+
+# expected value of Y, given that X > 2
+simX2 <- sim1M[sim1M[, 1] > 2, ]
+meanYX2 <- mean(simX2[, 2])
+meanYX2
+
+# (3) Find the expected value of Y, given that X = 2
+simX3 <- sim1M[sim1M[, 1] == 2, ]
+meanYX3 <- mean(simX3[, 2])
+meanYX3
+```
+
+
+## Question 6
+(a) Find the eigenvectors and eigenvalues for the matrix (on pdf)
+```{r 6a}
+# define matrix
+A <- matrix(c(1,7,3,7,4,5,3,5,0), nrow = 3, ncol = 3)
+eigen(A)$values
+eigen(A)$vectors
+```
+
+(b) Express the vectors x = <1, 3, 1> and y = <-1, 4, 9> in terms of the eigenvectors basis for the above matrix.
+```{r 6b}
+x <- c(1,3,1)
+y <- c(-1,4,9)
+Ax <- solve(eigen(A)$vectors, x) * x
+Ay <- solve(eigen(A)$vectors, y) * y
+Ax 
+Ay
+```
+
+(c) Find the inner product of x and y in the original coordinates. Then find the inner product of x and y in terms of the eigenvector basis. Do you get the same value?
+```{r 6c}
+xy <- sum(x * y)
+xy
+eigen_xy <- sum(t(x) %*% eigen(A)$vectors %*% y)
+eigen_xy
+```
+

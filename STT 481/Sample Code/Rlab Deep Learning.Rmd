@@ -1,0 +1,183 @@
+---
+title: "SS23 STT481: RLab: Deep Learning"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+We use the `keras` package, which interfaces to the `tensorflow` package which in turn links to efficient `python` code. 
+
+
+Getting keras up and running on your computer can be a challenge. The book website www.statlearning.com gives step-by-step instructions on how to achieve this. Guidance can also be found at keras.rstudio.com.
+
+# A Single Layer Network on the Hitters Data
+
+We start by fitting the models with a single layer network. We set up the data, and separate out a training and test set.
+
+``` {r echo=TRUE}
+library(ISLR2)
+Gitters <- na.omit(Hitters)
+n <- nrow(Gitters)
+set.seed(13)
+ntest <- trunc(n / 3)
+testid <- sample(1:n, ntest)
+x <- scale(model.matrix(Salary ~ . - 1, data = Gitters))
+y <- Gitters$Salary
+```
+
+To fit the neural network, we first set up a model structure that describes the network.
+
+### Step 1: Set up a model structure
+``` {r echo=TRUE}
+library(keras)
+modnn <- keras_model_sequential() %>%
+layer_dense(units = 50, activation = "relu", input_shape = ncol(x)) %>%
+layer_dropout(rate = 0.4) %>% layer_dense(units = 1)
+```
+
+We have created a vanilla model object called `modnn`, and have added details about the successive layers in a sequential manner, using the function `keras_model_sequential()`. The *pipe* operator `%>%` passes the previous term as the first argument to the next function, and returns the result. It allows us to specify the layers of a neural network in a readable form.
+
+We illustrate the use of the pipe operator on a simple example. We first make a matrix, and then we center each of the variables.
+``` {r echo=TRUE}
+x <- scale(model.matrix(Salary ~ . - 1, data = Gitters))
+```
+Compound expressions like this can be difficult to parse. We could have obtained the same result using the pipe operator:
+``` {r echo=TRUE}
+x <- model.matrix(Salary ~ . - 1, data = Gitters) %>% scale()
+```
+Using the pipe operator makes it easier to follow the sequence of operations.
+
+We now return to our neural network. The object `modnn` has a single hidden layer with 50 hidden units, and a ReLU activation function. It then has a dropout layer, in which a random 40\% of the 50 activations from the previous layer are set to zero during each iteration of the stochastic gradient descent algorithm. Finally, the output layer has just one unit with no activation function, indicating that the model provides a single quantitative output.
+
+Next we add details to `modnn` that control the fitting algorithm.
+
+### Step 2: control the fitting algorithm
+
+``` {r echo=TRUE}
+modnn %>% compile(loss = "mse", 
+                  optimizer = optimizer_rmsprop(),
+                  metrics = list("mean_absolute_error") )
+```
+
+The `compile()` function does not actually change the R object `modnn`, but it does communicate these specifications to the corresponding `python` instance of this model that has been created along the way.
+
+### Step 3: fit the model
+
+Now we fit the model. We supply the training data and two fitting parameters, epochs and batch size. Using 32 for the latter means that at each step of SGD, the algorithm randomly selects 32 training observations for the computation of the gradient. An epoch amounts to the number of SGD steps required to process $n$ observations. Since the training set has $n = 176$, an epoch is $176/32 = 5.5$ SGD steps. The `fit()` function has an argument `validation_data`; these data are not used in the fitting, but can be used to track the progress of the model (in this case reporting the mean absolute error). Here we actually supply the test data so we can see the mean absolute error of both the training data and test data as the epochs proceed. To see more options for fitting, use `?fit.keras.engine.training.Model`.
+
+``` {r echo=FALSE}
+history <- modnn %>% fit(
+  x[-testid, ], y[-testid], epochs = 1500, batch_size = 32,
+  validation_data = list(x[testid, ], y[testid])
+)
+```
+
+### Step 4: make predictions
+
+Finally, we predict from the final model, and evaluate its performance on the test data. 
+``` {r echo=TRUE}
+npred <- predict(modnn, x[testid, ])
+sqrt(mean((y[testid] - npred)^2))
+```
+
+Let's compare with lasso.
+
+``` {r echo=TRUE}
+library(glmnet)
+cvfit <- cv.glmnet(x[-testid, ], y[-testid], alpha = 1)
+cpred <- predict(cvfit, x[testid, ], s = "lambda.min")
+sqrt(mean((y[testid] - cpred)^2))
+```
+
+# A Multilayer Network on the MNIST Digit Data
+
+The `keras` package comes with a number of example datasets, including the `MNIST` digit data. Our first step is to load the `MNIST` data. The `dataset mnist()` function is provided for this purpose.
+
+``` {r echo=TRUE}
+mnist <- dataset_mnist()
+x_train <- mnist$train$x
+g_train <- mnist$train$y
+x_test <- mnist$test$x
+g_test <- mnist$test$y
+```
+
+we need to "one-hot" encode the class label. Luckily `keras` has a lot of built-in functions that do this for us.
+
+``` {r echo=TRUE}
+x_train <- array_reshape(x_train, c(nrow(x_train), 784))
+x_test <- array_reshape(x_test, c(nrow(x_test), 784))
+y_train <- to_categorical(g_train, 10)
+y_test <- to_categorical(g_test, 10)
+```
+
+Neural networks are somewhat sensitive to the scale of the inputs. For example, ridge and lasso regularization are affected by scaling. Here the inputs are eight-bit grayscale values between 0 and 255, so we rescale to the unit interval.
+
+``` {r echo=TRUE}
+x_train <- x_train / 255
+x_test <- x_test / 255
+```
+
+Now we are ready to fit our neural network.
+
+### Step 1: Set up a model structure
+
+``` {r echo=TRUE}
+modelnn <- keras_model_sequential()
+modelnn %>%
+  layer_dense(units = 256, activation = "relu",
+       input_shape = c(784)) %>%
+  layer_dropout(rate = 0.4) %>%
+  layer_dense(units = 128, activation = "relu") %>%
+  layer_dropout(rate = 0.3) %>%
+  layer_dense(units = 10, activation = "softmax")
+```
+
+The first layer goes from 28 × 28 = 784 input units to a hidden layer of 256 units, which uses the ReLU activation function. This is specified by a call to `layer_dense()`, which takes as input a `modelnn` object, and returns a modified `modelnn` object. This is then piped through layer `dropout()` to perform dropout regularization. The second hidden layer comes next, with 128 hidden units, followed by a dropout layer. The final layer is the output layer, with activation "softmax" for the 10-class classification problem, which defines the map from the second hidden layer to class probbilities. Finally, we use `summary()` to summarize the model, and to make sure we got it all right.
+
+``` {r echo=TRUE}
+summary(modelnn)
+```
+
+### Step 2: control the fitting algorithm
+
+Next, we add details to the model to specify the fitting algorithm. We fit the model by minimizing the cross-entropy function.
+``` {r echo=TRUE}
+modelnn %>% compile(loss = "categorical_crossentropy",
+    optimizer = optimizer_rmsprop(), metrics = c("accuracy")
+  )
+```
+
+### Step 3: fit the model
+
+``` {r echo=FALSE}
+system.time(
+  history <- modelnn %>%
+    fit(x_train, y_train, epochs = 30, batch_size = 128,
+        validation_split = 0.2)
+)
+plot(history, smooth = FALSE)
+```
+
+Here we specified a validation split of 20%, so the training is actually performed on 80% of the 60,000 observations in the training set. This is an alternative to actually supplying validation data.
+
+### Step 4: make predictions
+``` {r echo=TRUE}
+accuracy <- function(pred, truth)
+  mean(drop(as.numeric(pred)) == drop(truth))
+modelnn %>% predict(x_test) %>% k_argmax() %>% accuracy(g_test)
+```
+
+Let's compare with multiclass logistic regression, which is equivalent to a network with an input layer and output layer that omits the hidden layers.
+``` {r echo=TRUE}
+modellr <- keras_model_sequential() %>%
+  layer_dense(input_shape = 784, units = 10,
+       activation = "softmax")
+modellr %>% compile(loss = "categorical_crossentropy",
+     optimizer = optimizer_rmsprop(), metrics = c("accuracy"))
+modellr %>% fit(x_train, y_train, epochs = 30,
+      batch_size = 128, validation_split = 0.2)
+modellr %>% predict(x_test) %>% k_argmax() %>% accuracy(g_test)
+```

@@ -1,0 +1,111 @@
+---
+title: "Practice with functions and graphs to analyze distributions"
+author: 'Derien W - 3 '
+date: "M4 ICA3"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+<style type="text/css">
+/* Title */
+h1.title {
+  color: #1D5D53;
+  font-weight: bold;
+}
+/* Level 1 header */
+h1 {
+  color: #1D5D53;
+}
+/* Level 2 header */
+h2 {
+  color: #1D5D53;
+}
+/* Table of contents */
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    z-index: 2;
+    color: #fff;
+    background-color: #1D5D53;
+    border-color: #337ab7;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA)
+```
+
+## Body temperature data
+
+A recent paper, [Decreasing human body temperature in the United States since the Industrial Revolution](https://elifesciences.org/articles/49555), presented evidence that human body temperatures in the United States have been decreasing over the past one hundred or so years. (Many scientists dispute the conclusions of the paper.) One of the data sets in the paper is taken from the NHANES (National Health and Nutrition Examination Study), and is available in the file `NHANES_processed.csv`. There are many variables in the data, but our focus will be on the variable `temp` that provides resting oral body temperatures.
+```{r}
+NHANES <- read.csv('NHANES_processed.csv')
+head(NHANES)
+library(tidyverse)
+library(ggplot2)
+```
+(@) Draw a histogram of the body temperature variable
+```{r q1}
+hist(NHANES$temp)
+```
+The *empirical cumulative distribution function* (ecdf) gives the proportion of data values at or below a particular value. In the case of the body temperature data, $\text{ecdf}(98.1)$, for example, gives the proportion of temperatures in the data set below $98.1$ degrees. A few minutes of thought reveals that 
+
++ $\text{ecdf}(x) = 0$ if $x$ is less than the minimum temperature in the data set;
++ $\text{ecdf}(x) = 1$ if $x$ is greater than or equal to the maximum temperature in the data set;
++ $\text{ecdf}(x)$ is a non-decreasing function of $x$.
+
+(@) Use the `stat_ecdf` function in `ggplot2` to draw an "empirical cumulative distribution function" for the body temperature variable.
+```{r q2}
+NHANES %>%  
+  ggplot(aes(x=temp)) +
+  stat_ecdf(size=1)
+```
+Look at the plot of the ecdf to gain more insight into the behavior of the ecdf.
+
+(@) Estimate the 25th, 50th, and 75th percentiles of the temperature data from the ecdf plot. How do these compare with the percentiles computed via the `summary()` function?
+```{r q3}
+summary(NHANES$temp)
+quantile(NHANES$temp, c(.25, .50, .75))
+```
+(@) How does the mean temperature compare to the median temperature?
+## Question 4: The numbers are nearly identical. 
+
+## Name data
+
+The file `CensusNames.csv` contains data on surnames in the United States, including the name, the rank of the name among all names, and the number of people in the United States with that name. (Some uncommon names are not included in the data.)
+```{r}
+census <- read.csv('CensusNames.csv')
+census <- as_tibble(census)
+census
+```
+(@) Is your surname in the list? If so, what is its rank, and how many people in the United States have that name?
+```{r q5}
+census %>%
+  filter(name == "Weatherspoon")
+## No one has my surname
+
+```
+(@) Draw a histogram and an ecdf plot of the variable which counts the number of people with a name. What do you notice from these plots?
+```{r q6}
+ggplot(data = census, aes(x = count))+geom_histogram()
+       
+       
+ggplot(data = census, aes(x = count))+stat_ecdf()
+```
+(@) Draw a histogram and an ecdf plot of the base 10 logarithm of the counts. The R function `log10()` computes base 10 logarithms.
+```{r q7}
+ggplot(data = census, aes(x = log10(count)))+geom_histogram()
+       
+       
+ggplot(data = census, aes(x = log10(count)))+stat_ecdf()
+```
+(@) From the ecdf plot of the logarithm of the counts, estimate the 25th, 50th, and 75th percentiles of the counts. Compare these to the computed percentiles from the `summary()` function. Are they similar?
+```{r q8}
+quantile(log10(census$count))
+```
+(@) How does the mean count compare to the median count? How does the mean count compare to the 75th percentile of the counts?
+```{r q9}
+mean(log10(census$count))
+quantile(log10(census$count), 0.75)
+## It's within 0.20 of the 75%!
+```

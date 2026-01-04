@@ -1,0 +1,59 @@
+---
+title: "ICA 2"
+author: "Derien Weatherspoon"
+date: '2023-01-25'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+cars_multi <- read.csv("cars_multi.csv")
+#All questions should be answered with ggplot. We will be using the cars_multi dataset for problems 1-4. Be sure to label all graphs with a title, and all axes with a name. 
+```
+
+head(cars_multi)
+
+```{r Q1}
+#1.	Create a histogram for the weight variable, with the bars filled by the cylinder value. 
+Q1 <- ggplot(data = cars_multi, aes(x = weight, fill = as.factor(cylinders))) + geom_histogram() + labs(title = "Histogram for weight variable")
+Q1
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r Q2}
+#2.	Plot a scatter plot of mpg vs. weight (y is mpg, x is weight), colored by cylinders (you will have to use as.factor to do this). Include trendlines for each with lm. What can you say about the relationship between these 3 variables?
+Q2 <- ggplot(cars_multi, aes(x = weight, y = mpg, color = as.factor(cylinders))) + geom_point(size = 1) + geom_smooth(method = lm, formula = y ~x) + labs(title = "Scatterplot of mpg vs weight") + ylim(0,50)
+Q2
+
+```
+
+```{r Q3}
+#3.	Take the function f(x, y) = 2x2 – xy + y2.  Create a contour plot with both contour and ggplot + geom_contour.  Let x go from -4 to 4 and y from -3 to 3 (steps of 0.1 are sufficient).
+fn <- function(x,y){
+  z = 2*2- x*y + y^2
+    return(z)
+}
+x <- seq(-4,4, by = 0.1)
+y <- seq(-3,3, by = 0.1)
+z <- matrix(nrow = length(x),ncol = length(y))
+for(i in 1:length(y)){
+  for(j in 1:length(x)){
+    z[j,i] = fn(x[j],y[i])
+  }
+}
+contour(x,y,z)
+
+contour_data <- data.frame(x = numeric(0), y = numeric(0), z = numeric(0))
+for(i in 1:length(y)){
+  for(j in 1:length(x)){
+    contour_data[nrow(contour_data) + 1,] = c(x=x[j],y=y[i],z=fn(x[j],y[i]))
+  }
+}
+ggplot(data = contour_data, aes(x = x, y = y)) + geom_contour(aes(z = z))
+```

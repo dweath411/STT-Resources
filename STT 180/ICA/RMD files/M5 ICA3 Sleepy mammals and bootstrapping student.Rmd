@@ -1,0 +1,280 @@
+---
+title: "Sleepy mammals and bootstrapping"
+author: "Derien W"
+date: "M5 ICA3"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    number_sections: no
+    df_print: paged
+---
+
+<style type="text/css">
+/* Title */
+h1.title {
+  color: #3A2C29;
+  font-size:40px;
+  font-weight: bold;
+}
+/* Level 1 header */
+h1 {
+  color: #3A2C29;
+  font-size:30px;
+}
+/* Level 2 header */
+h2 {
+  color: #C9C675;
+  font-size:25px;
+}
+/* Level 3 header */
+h3 {
+  color: #C9C675;
+  font-size:20px;
+}
+/* Table of contents */
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    z-index: 2;
+    color: #fff;
+    background-color: #C9C675;
+    border-color: #337ab7;
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      error = TRUE,
+                      message = T, 
+                      warning = T,
+                      comment = NA)
+set.seed(3122019)
+```
+
+
+
+# Introduction
+
+Data frame `msleep` is a dataset available in `ggplot2`. It contains information on 83 mammals with regards to their sleep behavior. To get started, load packages `tidyverse` and `infer`.
+
+```{r packages, include=FALSE}
+library(tidyverse)
+library(infer)
+```
+
+Below is a basic custom theme. Feel free to try it out when you use `ggplot()`.
+Simply add it as a layer to your plot. Rather than using `theme_bw()` you can
+use `theme_custom()`. This custom theme increases the font point size on axes
+and their labels.
+
+```{r theme-custom}
+theme_custom <- function() {
+  theme_bw() +
+  theme(axis.title = element_text(size = 16), 
+        title = element_text(size = 20),
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12),
+        plot.caption = element_text(size = 10))
+}
+```
+
+Take a `glimpse()` at the data below
+
+```{r glimpse}
+attach(msleep)
+glimpse(msleep)
+```
+
+For all the questions that follow, use a sequence of functions in package `infer`. For details on `msleep`, type `?msleep` in your console.
+
+# Test of Hypothesis
+
+Past research has shown that humans have a **median** sleep time of 7.5 hours per day. Researchers want to investigate if all other mammals have a higher 
+median number of sleep hours per day. A random sample of 82 mammals revealed a median number of sleep hours per day to be 10.1 hours. Is this enough evidence to suggest mammals that are not human have a higher 
+median number of sleep hours per day?
+```{r}
+msleep %>%
+  filter(name != "Human") %>%
+  specify(response = sleep_total) %>%
+  hypothesise(null = "point", med = 7.5) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "median") 
+```
+
+## Test for the median
+
+State the null and alternative hypotheses given the problem above.
+#Null Hypothesis: med = 10
+#Alternative Hypothesis: med =/= 10
+
+### Simulated null distribution
+
+Plot a histogram of the simulated null distribution and place a 
+vertical line at the value of the observed sample median of 10.1.
+
+```{r no-human, echo=FALSE}
+# remove Human from msleep for simulation
+null.dist <- msleep %>%
+  filter(name != "Human") %>%
+  specify(response = sleep_total) %>%
+  hypothesise(null = "point", med = 7.5) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "median") 
+  
+ggplot(null.dist, aes(stat)) + geom_histogram(binwidth = .5) + geom_vline(xintercept = 10.1) + theme_custom()
+```
+
+### Understanding the histogram
+
+In the histogram, what does each bar represent? For example, the bar at 8 having a little more than 1500 counts, what does that represent? 
+#This tells you that about 1500 of the distribution lies under the median of 8
+</b>
+
+Where is the center of the histogram? What do you think will change in the shape of the histogram if we had a list of 150 mammals (excluding human)?
+#The center of the distribution is about 7.5, and this is the median for all mammals including humans. It would change to about 10 if we excluded humans.
+</br>
+
+### Compute the p-value
+
+Use the simulated null distribution to compute the p-value. Recall that the p-value is the probability of observing data at least as
+favorable to the alternative hypothesis as the current data set, given that the null hypothesis is true.
+```{r}
+null.dist %>% 
+  filter(stat >= 10.1) %>%
+  summarise(p_value = 2 * n() / nrow(null.dist))
+```
+### Conclusion
+
+State your conclusion in the context of the problem.
+#The the p-value is less than the alpha, 0.05, so that leads us to reject the null hypothesis
+## How about the mean? 
+
+We have discussed about the average sleep hours in our class lecture in context of a two sided hypothesis test. Let us examine how it changes (if at all) when the test is one sided. 
+
+On average, it is believed that humans need 8 hours of sleep per day. Using the same sample as above, it was found that the average number of sleep hours per day to be 10.4 hours for all other mammals except humans. Is this enough evidence to suggest mammals that are not human have a higher mean number of sleep hours per day?
+
+### Hypotheses
+
+State the null and alternative hypotheses.
+#Null hypothesis: mu = 8
+#Alternative hypothesis: mu =/= 8
+
+### Simulated null distribution
+
+Plot a histogram of the simulated null distribution and place a vertical line at the value of the observed sample mean of 10.4.
+```{r}
+null.dist1 <- msleep %>%
+  filter(name != "Human") %>%
+  specify(response = sleep_total) %>%
+  hypothesise(null = "point", mu = 8) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "mean") 
+  
+ggplot(null.dist1, aes(stat)) + geom_histogram(binwidth = .5) + geom_vline(xintercept = 10.4) + theme_custom()
+```
+### Compute the p-value
+
+Use the simulated null distribution to compute the p-value. Recall that the
+p-value is the probability of observing data at least as
+favorable to the alternative hypothesis as the current data set, given
+that the null hypothesis is true.
+```{r}
+null.dist %>% 
+  filter(stat >= 10.4) %>%
+  summarise(p_value = 1 * n() / nrow(null.dist1))
+```
+### Conclusion
+
+Did the conclusion change when the parameter was changed from median to mean? Justify your answer.
+#No, the conclusion did not change. We still reject the null hypothesis.
+</b>
+
+## One sided vs. two sided
+
+If our research question was: is this enough evidence to suggest that mean number of sleep hours per day for mammals that are not human is different from humans, how would our hypothesis test change? 
+#If you're testing for one thing that's greater, then it's one sided, but if testing for more than one thing that's greater, it's a two sided test. The hypothesis would change.
+</b>
+
+### Which test needs stronger evidence?
+
+Based on the calculated p-values for the one sided and two-sided tests, which test needs stronger evidence against the null hypothesis in order to reject it?
+# Both tests need stronger evidence. The null hypothesis gets rejected for both regardless based on the current observed data.
+</b>
+
+
+## Plausible value of the population parameter?
+
+Based on the given data, had our hypothesized mean been 9.5, would our conlcusion have changed? Perform both the one-sided and two-sided test and state the conclusions.
+```{r}
+null.dist1 <- msleep %>%
+  filter(name != "Human") %>%
+  specify(response = sleep_total) %>%
+  hypothesise(null = "point", mu = 9.5) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "mean") 
+  
+ggplot(null.dist1, aes(stat)) + geom_histogram(binwidth = .5) + geom_vline(xintercept = 10.4) + theme_custom()
+## Yes, the conclusion would have changed. The null hypothesis would not be rejected.
+```
+</b>
+
+# Estimation
+
+## Population mean
+
+1. Create a 95% confidence interval for the mean amount of hours all mammals are awake per day. Also, plot the simulated bootstrap distribution.
+```{r}
+boot.means <- msleep %>%
+  specify(response = awake) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "mean")
+ggplot(boot.means, aes(stat)) + geom_histogram(binwidth = .5)  + theme_custom()
+boot.means %>%
+  summarise(lower95 = quantile(stat, probs = .025),
+            upper95 = quantile(stat, probs = .975))
+  
+```
+
+2. Create 90% and 99% confidence intervals for the mean amount of hours all mammals are awake per day. What do you notice about the widths of the three intervals?
+```{r}
+boot.means %>%
+summarise(lower90 = quantile(stat, probs = .025), 
+          upper90 = quantile(stat, probs = .975), 
+          lower99 = quantile(stat, probs = 0.005),
+          upper99 = quantile(stat, probs = .995))
+```
+## Beyond mean: Population standard deviation
+
+1. Create a 95% confidence interval for the standard deviation in terms of the
+hours mammals sleep per day.
+
+```{r ci95-sd, results='hold'}
+boot.sd <- msleep %>%
+  specify(response = awake) %>%
+  generate(reps = 10000, type = "bootstrap") %>%
+  calculate(stat = "sd")
+# bootstrap samples change the stat to sd
+boot.sd %>%
+  summarise(lower95 = quantile(stat, probs = .025),
+            upper95 = quantile(stat, probs = .975))
+# cutoff bounds
+sd.sub <- function(x, lower = 3, upper = 5){
+  Cutoffs <- quantile(x, probs = c(lower,upper))
+  return(mean(x[x >= Cutoffs[1] & x <= Cutoffs[2]]))
+}
+# save as vector
+Above.
+# visualize bootstrap sample means
+Above.
+```
+
+<br><br>
+
+
+# References
+
+1. V. M. Savage and G. B. West. A quantitative, theoretical framework for understanding mammalian sleep. Proceedings of the National Academy of Sciences, 104 (3):1051-1056, 2007.
+
+2. https://cran.r-project.org/web/packages/infer/vignettes/flights_examples.html

@@ -1,0 +1,507 @@
+---
+title: "STT 481 HW 5"
+author: "Derien Weatherspoon"
+date: "2023-04-10"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, message=FALSE}
+# Load libraries
+library(ISLR)
+library(MASS)
+library(gam)
+library(glmnet)
+library(boot)
+library(leaps)
+library(rpart)
+library(randomForest)
+library(splines)
+library(tree)
+library(gbm)
+```
+
+
+# Question 1
+
+### Fit a GAM to predict Salary in the Hitters dataset. 
+
+#### First, remove the observations for whom the salary information is unknown, then split the data set by using the following command lines:
+
+```{r Q1 setup}
+data("Hitters")
+Hitters <- Hitters[!is.na(Hitters$Salary),]
+set.seed(1111)
+train.h <- sample(nrow(Hitters), 200)
+Hitters.train <- Hitters[train.h,]
+Hitters.test <- Hitters[-train.h,]
+```
+
+##### a) Using **log(Salary)** as response and the other variables as the predictors, perform forward stepwise selection on the training set in order to identify a satisfactory model that uses just a subset of the predictors.
+
+```{r Q1 a}
+fwd.hitters <- regsubsets(log(Salary) ~ ., data = Hitters.train, method = 'forward', nvmax = ncol(Hitters.train))
+
+fwd.summary.hitters <- summary(fwd.hitters) 
+
+which.min(fwd.summary.hitters$bic)
+which.min(fwd.summary.hitters$adjr2)
+which.min(fwd.summary.hitters$cp) # will use the cp value
+
+coef(fwd.hitters, id = 3)
+```
+Using forward stepwise selection and the lowest BIC score of 3, the best subset of predictors for the model are "Hits", "CRuns", "League".
+
+##### b) Fit a GAM on the training data, using **log(Salary)** as the response and the features selected in the previous step as the predictors. Plot the results, explain your findings.
+
+```{r Q1 b}
+hitters.gam <- gam(log(Salary) ~ s(Hits, df = 2) + s(CRuns, df = 2) + League, data = Hitters.train)
+
+par(mfrow = c(2,2))
+plot(hitters.gam, se = T, col = "blue")
+summary(hitters.gam)
+```
+This model produced an AIC of 326.2644, which seems to be alright for a model of this size. All variables are significant for with Parametrix Effects. 
+
+##### c) Evaluate the model obtained on the test set. try different tuning parameters (if using s() then try different df's; if using local regression lo(), try different span's) and explain the results obtained.
+
+```{r Q1 c}
+hitters.gam.test <- gam(log(Salary) ~ s(Hits, df = 4) + s(CRuns, df = 4) + League, data = Hitters.test)
+
+par(mfrow = c(2,2))
+plot(hitters.gam.test, se = T, col = "blue")
+summary(hitters.gam.test)
+```
+Comparing the test and training set GAM, the first obvious difference is that the plots are much more "bumpier" in a sense. The AIC score dropped significantly to 103.2612, which is great. As I increased the degree of freedom for Hits and CRuns, it seems their significance also increased. 
+
+##### d) For which variables, if any, is there evidence of a non-linear relationship with the response?
+
+It seems that there is a non-linear relationship with the CRuns and the response, shown from ANOVA for Nonparametric Effects.
+
+# Question 2
+
+### This question relates to the **Credit** data set. (Regression problem)
+
+#### First, split the data set by running the following command lines:
+
+```{r Q2 setup}
+data("Credit")
+set.seed(1234)
+Credit <- Credit[,-1] # remove ID column
+train.c <- sample(nrow(Credit), 300)
+Credit.train <- Credit[train.c,]
+Credit.test <- Credit[-train.c,]
+```
+
+##### a) Fit a tree to the training data, with **Balance** as the response and the other variables. Use the **summary()** function to produce summary statistics about the tree, and describe the results obtained. What is the training MSE? How many terminal nodes does the tree have?
+
+```{r Q2 a}
+credit.tree <- tree(Balance ~ ., data = Credit.train)
+summary(credit.tree)
+
+# MSE
+
+credit.pred.train <- predict(credit.tree, newdata = Credit.train)
+actual.train <-Credit.train$Balance
+plot(credit.pred.train, actual.train)
+abline(0,1)
+round(mean((credit.pred.train-actual.train)^2))
+```
+For this tree model, the only variables used in construction are: "Rating", "Income", "Student", "Limit". There are 10 terminal nodes. I found the MSE to be 26410 for the training set.
+
+##### b) Type in the name of the tree object to get a detailed text output. Pick one of the terminal nodes, and interpret the information displayed.
+
+```{r Q2 b}
+credit.tree
+```
+Choosing node 12. This node asked whether or not the income was less than 60.2745. If income was in this threshold, then the tree split the average, and if you're income was less than 60.2745, then the balance for this path would be 834.90.
+
+##### c) Create a plot of the tree, and interpret the results.
+
+```{r Q2 c}
+plot(credit.tree)
+text(credit.tree, pretty = 0)
+```
+We can see here from the plot that there are indeed 10 terminal nodes, with the most important ones being Rating, Limit, and Income.
+
+##### d) Predict the response on the test data. What is the test MSE?
+
+```{r Q2 d}
+credit.pred.test <- predict(credit.tree, newdata = Credit.test)
+head(credit.pred.test)
+actual.test <-Credit.test$Balance
+plot(credit.pred.test, actual.test)
+abline(0,1)
+round(mean((credit.pred.test-actual.test)^2))
+```
+Making predictions on the test set, the predictions look pretty scattered all over the place. I would think that this is due to the distribution of wealth not being equal across the globe. I found the MSE for the test set to be much much higher than training MSE, which is worrisome. 
+
+##### e) Apply the **cv.tree()** function to the training set in order to determine the optimal tree size.
+
+```{r Q2 e}
+cv.credit <- cv.tree(credit.tree)
+best.size <- cv.credit$size[which.min(cv.credit$dev)]
+best.size
+```
+The best size for the tree seems to be K = 10.
+
+##### f) Produce a plot with tree size on the x-axis and cross-validated error on the y-axis.
+
+```{r Q2 f}
+plot(cv.credit$k, cv.credit$dev, type = "b") # main plot
+```
+
+##### g) Which tree size corresponds to the lowest cross-validated error?
+
+```{r Q2 g}
+plot(cv.credit$size, cv.credit$dev, type = "b")
+```
+Judging from the plot, it looks like the size of 10 is corresponds to the lowest error.
+
+##### h)  Produce a pruned tree corresponding to the optimal tree size obtained using cross-validation. If cross-validation does not lead to selection of a pruned tree, then create a pruned tree with five terminal nodes.
+
+```{r Q2 h}
+#prune.credit <- prune.tree(credit.tree, best = best.size) #use prune.misclass for next part
+#plot(prune.credit) # the plot is the same
+#text(prune.credit, pretty = 0)
+#prune.credit
+
+prune.credit <- prune.tree(credit.tree, best = 5) 
+plot(prune.credit) 
+text(prune.credit, pretty = 0)
+prune.credit
+```
+The plot is the same, so use a pruned tree with 5 terminal nodes.
+
+##### i) Compare the training MSEs between the pruned and unpruned trees. Which is higher?
+
+```{r Q2 i}
+# PRUNED TRAINING MSE
+credit.train.prune.pred <- predict(prune.credit, newdata = Credit.train)
+actual.train.credit <-Credit.train$Balance
+plot(credit.train.prune.pred, actual.train.credit)
+abline(0,1)
+(mean((credit.train.prune.pred-actual.train.credit)^2))
+
+# UNPRUNED TRAINING MSE
+
+credit.pred.train <- predict(credit.tree, newdata = Credit.train)
+plot(credit.pred.train, actual.train)
+abline(0,1)
+(mean((credit.pred.train-actual.train)^2))
+```
+Comparatively, the training MSE for unpruned trees is a lot lower than the training MSE for pruned trees. Why is this? Is the pruned model poor?
+
+##### j) Compare the test MSEs between the pruned and unpruned trees. Which is higher?
+
+```{r Q2 j}
+# PRUNED TEST MSE
+credit.test.prune.pred <- predict(prune.credit, newdata = Credit.test)
+actual.test <-Credit.test$Balance
+plot(credit.test.prune.pred, actual.test)
+abline(0,1)
+(mean((credit.test.prune.pred-actual.test)^2))
+
+# UNPRUNED TEST MSE
+
+credit.pred.test <- predict(credit.tree, newdata = Credit.test)
+plot(credit.pred.test, actual.test)
+abline(0,1)
+(mean((credit.pred.test-actual.test)^2))
+```
+Again, the pruned test MSE is much higher than the unpruned test MSE.
+
+##### k) Fit a bagging model to the training set with **Balance** as the response and the other variables. Use 1,000 trees **(ntree = 1000)**. Use the **importance()** function to determine which variables are most important.
+
+```{r Q2 k}
+ncol(Credit.train) - 1 # number of predictors
+bag.credit <- randomForest(Balance ~ ., data = Credit.train, mtry = 10, ntree = 1000, importance = T)
+importance(bag.credit)
+varImpPlot(bag.credit)
+```
+mtry is set to 10 because I determined earlier in the chunk that the number of predictors should be 10. Using the importance function too, I have found the 10 predictors and their measure of importance.
+
+##### l) Use the bagging model to predict the response on the test data. Compute the test MSE.
+
+```{r Q2 l}
+bag.credit.pred <- predict(bag.credit, newdata = Credit.test)
+head(bag.credit.pred) # predicting response
+actual.test <-Credit.test$Balance
+plot(bag.credit.pred, actual.test)
+abline(0,1)
+(mean((bag.credit.pred-actual.test)^2))
+```
+The test MSE was found to be 15024.21, and I have also predicted the first 11 values.
+
+##### m) Fit a random forest model to the training set with **Balance** as the response and the other variables. Use 1,000 trees **(ntree = 1000)**. Use the **importance()** function to determine which variables are most important.
+
+```{r Q2 m}
+sqrt(ncol(Credit.train) - 1)
+rf.credit <- randomForest(Balance ~ ., data = Credit.train, mtry = 3, importance = T, ntree = 1000)
+rf.credit
+importance(rf.credit)
+varImpPlot(rf.credit)
+```
+The importance of each variable is shown. It looks like Cards, Age, Education, Gender, Married, and Ethnicity are almost useless in the importance factor.
+
+##### n) Use the random forest to predict the response on the test data. Compute the MSE.
+
+```{r Q2 n}
+rf.credit.pred <- predict(rf.credit, newdata = Credit.test)
+actual.test <-Credit.test$Balance
+plot(rf.credit.pred, actual.test)
+abline(0,1)
+(mean((rf.credit.pred-actual.test)^2))
+```
+I calculated the test MSE to be 24306.02, which isn't the best or the worst that we've seen so far.
+
+##### o) Fit a boosting model to the training set with **Balance** as the response and the other variables. Use 1,000 trees, and a shrinkage value of 0.01 (lambda = 0.01). Which predictors appear to be the most important?
+
+```{r Q2 o}
+credit.boost <- gbm(Balance ~., data = Credit.train, distribution = "gaussian", n.trees = 1000, shrinkage = 0.01)
+credit.boost
+summary(credit.boost)
+```
+The boosted model states that there 10 predictors included, 8 of those had non-zero influence. The most influence was provided by Limit and Rating.
+
+##### p) Use the boosting model to predict the response on the test data. Compute the test MSE.
+
+```{r Q2 p}
+#First, we need to find the best number of trees.
+credit.boost.cv <- gbm(Balance ~ ., data = Credit.train, 
+                      distribution = "gaussian", shrinkage = 0.01, 
+                      n.tree = 1000, cv.folds = 10)
+which.min(credit.boost.cv$cv.error)
+# 1000 trees is the best number of trees to make predictions with.
+
+credit.boost.pred <- predict(credit.boost, newdata = Credit.test, n.trees = which.min(credit.boost.cv$cv.error))
+actual.test <-Credit.test$Balance
+plot(credit.boost.pred, actual.test)
+abline(0,1)
+(mean((credit.boost.pred-actual.test)^2))
+```
+After finding out the best number of trees was 1000 for the prediction, the test MSE for the boosting model was found to be 19036.85.
+
+##### q) Fit a GAM to the training set with **Balance** as the response and the other variables, and use the GAM to predict the response on the test data. Compute the test MSE.
+
+```{r Q2 q}
+credit.gam <- gam(Balance ~ s(Income, df = 2) + s(Limit, df = 2) + s(Rating, df = 2) + s(Cards, df = 3) + s(Age, df = 3) + s(Education, df = 3) + Gender + Student + Married + Ethnicity, data = Credit.train)
+
+par(mfrow = c(2,2))
+plot(credit.gam, se = T, col = "darkgreen")
+summary(credit.gam)
+
+# Compute test MSE
+gam.credit.pred <- predict(credit.gam, newdata = Credit.test)
+actual.test <-Credit.test$Balance
+plot(gam.credit.pred, actual.test)
+abline(0,1)
+(mean((gam.credit.pred-actual.test)^2))
+```
+The Test MSE for the GAM model was calculated to be 6708.778, which is very low.
+
+##### r) Compare the test MSEs between the unpruned trees, pruned trees, bagging, random forest, boosting, and GAM. Which performs the best?
+
+```{r Q2 r}
+print(c("unpruned tree mse: ",(mean((credit.pred.test-actual.test)^2)))) # unpruned tree
+print(c("pruned tree mse: ",(mean((credit.test.prune.pred-actual.test)^2)))) # pruned tree
+print(c("bagging mse: ",(mean((bag.credit.pred-actual.test)^2)))) # bagging
+print(c("random forest mse: ",(mean((rf.credit.pred-actual.test)^2)))) # random forest
+print(c("boosting mse: ",(mean((credit.boost.pred-actual.test)^2)))) # boosting
+print(c("gam mse: ",(mean((gam.credit.pred-actual.test)^2)))) # gam
+```
+It looks like the GAM performs the best. This could be because the modifications it makes to the variables included in the model.
+
+# Question 3
+
+### This question relates to the OJ data set. (Classification problem.)
+
+#### First, we split the data set by using the following command lines:
+
+```{r Q3 setup}
+data("OJ")
+set.seed(200)
+train.o <- sample(nrow(OJ), 800)
+OJ.train <- OJ[train.o,]
+OJ.test <- OJ[-train.o,]
+```
+
+##### a) Fit a tree to the training data, with **Purchase** as the reponse and the other variables. Use the **summary()** function to produce summary statistics about the tree, and describe the results obtained. What is the training error rate? How many terminal nodes does the tree have?
+
+```{r Q3 a}
+OJ.tree <- tree(Purchase ~ ., data = OJ.train)
+summary(OJ.tree)
+```
+The training error rate observed here is 17%.
+
+##### b) Type in the name of the tree object in order to get a detailed text output. Pick one of the terminal nodes, and interpret the information displayed.
+
+```{r Q3 b} 
+OJ.tree
+```
+I am choosing node 4. The split criterion here is LoyalCH < 0.035, the number of observations in the branch is 55 with a deviance of 9.996 and an overall prediction for the branch of MM. Less than 2% of the observations in that branch take the value of CH, and the remaining 98% take the value of MM.
+
+##### c) Create a plot of the tree, interpret the results.
+
+```{r Q3 c}
+plot(OJ.tree)
+text(OJ.tree, pretty = 0)
+```
+The main branch is LoyalCH, and if you met the threshold or didn't, the tree split up into the two sub-LoyalCH paths, one where it has many terminal nodes, meaning more outcomes, and one that has few terminal nodes, meaning if you follow this path then you are easily classified.
+
+##### d)  Predict the response on the test data, and produce a confusion matrix comparing the test labels to the predicted test labels. What is the test error rate?
+
+```{r Q3 d}
+OJ.test.pred <- predict(OJ.tree, OJ.test, type = "class")
+table(OJ.test.pred, OJ.test$Purchase)
+mean(OJ.test.pred != OJ.test$Purchase)
+```
+The test error rate here is found to 17%.
+
+##### e) Apply the **cv.tree()** function to the training set in order to determine the optimal tree size.
+
+```{r Q3 e, message=FALSE}
+cv.oj <- cv.tree(OJ.tree, FUN = prune.misclass)
+names(cv.oj)
+cv.oj
+```
+
+##### f) Produce a plot with tree size on the x-axis and cross-validated classification error rate on the y-axis.
+
+```{r Q3 f}
+plot(cv.oj$size, cv.oj$dev, type = "b")
+which.min(cv.oj$size) # 4 is the lowest
+```
+
+##### g) Which tree size corresponds to the lowest cross-validated classification error rate?
+
+```{r Q3 g}
+which.min(cv.oj$size)
+```
+4 is the lowest size that is best fit for the model.
+
+
+##### h) Produce a pruned tree corresponding to the optimal tree size obtained using cross-validation. If cross-validation does not lead to selection of a pruned tree, then create a pruned tree with five terminal nodes.
+
+```{r Q3 h}
+prune.oj <- prune.misclass(OJ.tree, best = 4)
+plot(prune.oj)
+text(prune.oj, pretty = 0)
+```
+The pruned tree provided a different tree than before, so there is no need to use 5 as best size.
+
+##### i) Compare the training error rates between the pruned and unpruned trees. Which is higher?
+
+```{r Q3 i}
+summary(OJ.tree)
+summary(prune.oj)
+```
+They are same. I experimented with the seed, and the similarities between the two are directly because of the seed that was set at 200. If I change the seed, then the two will vary slightly. But for the case of simplicity, I will keep the seed at 200, which was set by the professor.
+
+##### j) Compare the test error rates between the pruned and unpruned trees. Which is higher?
+
+```{r Q3 j, message=FALSE}
+OJ.test.pred <- predict(OJ.tree, OJ.test, type = "class")
+table(OJ.test.pred, OJ.test$Purchase)
+print(c("Unpruned test error rate",mean(OJ.test.pred != OJ.test$Purchase)))
+
+OJ.prune.pred <- predict(prune.oj, OJ.test, type = "class")
+table(OJ.prune.pred, OJ.test$Purchase)
+print(c("Pruned test error rate",mean(OJ.prune.pred != OJ.test$Purchase)))
+```
+As one would expect, the error rates are identical again just like the training error rates were. Again, if we change the seed these will also change too.
+
+##### k) Fit a bagging model to the training set with **Purchase** as the response and the other variables as predictors. Use 1,000 trees **(ntree = 1000)**. Use the **importance()** function to determine which variables are most important.
+
+```{r Q3 k}
+ncol(OJ.train) - 1 
+bag.oj <- randomForest(Purchase ~ ., data = OJ.train, mtry = 17, ntree = 1000, importance = T)
+bag.oj
+importance(bag.oj)
+varImpPlot(bag.oj)
+```
+
+##### l) Use the bagging model to predict the response on the test data. Compute the test error rates.
+
+```{r Q3 l}
+bag.oj.pred <- predict(bag.oj, newdata = OJ.test)
+table(bag.oj.pred, OJ.test$Purchase)
+mean(bag.oj.pred != OJ.test$Purchase)
+```
+
+##### m) Fit a random forest model to the training set with with **Purchase** as the response and the other variables as predictors. Use 1,000 trees **(ntree = 1000)**. Use the **importance()** function to determine which variables are most important.
+
+```{r Q3 m}
+sqrt(ncol(OJ.train) -1)
+rf.oj <- randomForest(Purchase ~ ., data = OJ.train, mtry = 4, importance = T)
+rf.oj
+importance(rf.oj)
+varImpPlot(rf.oj)
+```
+
+##### n) Use the random forest to predict the response on the test data. Compute the test error rates.
+
+```{r Q3 n}
+rf.oj.pred <- predict(rf.oj, newdata = OJ.test)
+table(rf.oj.pred, OJ.test$Purchase)
+mean(rf.oj.pred != OJ.test$Purchase)
+```
+
+##### o) Fit a boosting model to the training set with **Purchase** as the response and the other variables as predictors. Use 1,000 trees, and a shrinkage value of 0.01 (lambda = 0.01). Which predictors appear to be the most important?
+
+```{r Q3 o}
+binary.purchase <- ifelse(OJ.train$Purchase == "CH", 1,0)
+boost.oj <- gbm(binary.purchase ~ ., data = OJ.train[,colnames(OJ.train) != "Purchase"], distribution = "bernoulli", shrinkage = 0.01, n.trees = 1000)
+boost.oj
+summary(boost.oj)
+```
+LoyalCH and PriceDiff are the most important ones, but LoyalCH is the most important in this model.
+
+##### p) Use the boosting model to predict the response on the test data. Compute the test error rates.
+
+```{r Q3 p}
+# First, do cross-validation to find the best number of trees
+boost.cv.oj <- gbm(binary.purchase ~ ., data = OJ.train[,colnames(OJ.train) != "Purchase"], distribution = "bernoulli", shrinkage = 0.01, n.trees = 1000, cv.folds = 10)
+which.min(boost.cv.oj$cv.error) # 900 trees is the best 
+
+# now perform predictions with 900 trees
+boost.oj.pred <- predict(boost.cv.oj, newdata = OJ.test, n.trees = 900, type = "response")
+boost.oj.pred <- ifelse(boost.oj.pred > 0.5, "CH", "MM")
+table(boost.oj.pred, OJ.test$Purchase)
+mean(boost.oj.pred != OJ.test$Purchase)
+```
+
+##### q) Fit a logistic regression to the training set with **Purchase** as the response and the other variables as predictors, and predict on the test data. Compute the test error rates.
+
+```{r Q3 q, message=FALSE}
+log.oj <- glm(binary.purchase ~ ., data = OJ.train[,colnames(OJ.train) != "Purchase"], family = binomial(link = "logit"))
+log.oj.pred <- predict(log.oj, newdata = OJ.test, type = "response")
+log.oj.pred <- ifelse(log.oj.pred > 0.5, "CH", "MM")
+mean(log.oj.pred != OJ.test$Purchase)
+
+```
+
+##### r) Rank the significance of the coefficients of the logistic regression. Is the result consistent with (k)?
+
+```{r Q3 r}
+summary(log.oj)
+```
+This is significant when it comes to showing the LoyalCH is the most significant. However, PriceDiff is listed as NA in the logistic model, thus not having any significance. 
+
+##### s) Compare the test error rates between the unpruned trees, pruned trees, bagging, random forest, boosting, and logistic regression. Which performs the best?
+
+```{r Q3 s}
+print(c("Unpruned test error rate",mean(OJ.test.pred != OJ.test$Purchase)))
+print(c("Pruned test error rate",mean(OJ.prune.pred != OJ.test$Purchase)))
+print(c("Bagging test error rate",mean(bag.oj.pred != OJ.test$Purchase)))
+print(c("Random Forest test error rate",mean(rf.oj.pred != OJ.test$Purchase)))
+print(c("Boosting test error rate",mean(boost.oj.pred != OJ.test$Purchase)))
+print(c("Logistic Regression test error rate",mean(log.oj.pred != OJ.test$Purchase)))
+```
+Looking at each of the error rates, it looks like Logistic Regression and Boosting methods perform the best. This could be because of the thresholds set in the code that make it perform better, and more accurately.
+

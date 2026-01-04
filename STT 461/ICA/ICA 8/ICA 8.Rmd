@@ -1,0 +1,74 @@
+---
+title: "ICA 8"
+author: "Derien Weatherspoon"
+date: "2023-03-24"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load libraries and Packages
+
+```{r}
+library(ggcorrplot)
+df <- read.csv("sampregdata.csv")
+head(df)
+```
+
+## Question 1
+
+Open the file and look at the correlation matrix.  Which x variable correlates the most strongly with y? (“Strongest” = highest absolute value of correlation)
+```{r}
+ggcorrplot(cor(df), lab_size = 1.5, tl.cex = 5, lab = T, title = "Correlation heatmap",  hc.order = TRUE)  #correlation heatmap
+round(cor(df),
+  digits = 2 # rounded to 2 decimals
+)
+```
+The variable x4 correlates the most with variable y, with an absolute value of .52.
+
+## Question 2
+
+Build a linear regression model for y with that x.  Evaluate the residuals by:
+a.	Looking at a normal probability plot (qqnorm(<residuals>))
+b.	Plot the residuals vs. the actual y value.
+
+```{r}
+lm.fit <- lm(y ~ x4, data = df)
+summary(lm.fit)
+par(mfrow=c(2,2))
+plot(lm.fit) 
+```
+
+## Question 3
+
+Now, build a multiple regression model with all of the x’s.  How is the fit?
+```{r}
+lm.full <- lm(y ~ ., data = df)
+summary(lm.full)
+par(mfrow=c(2,2))
+plot(lm.full) 
+```
+Adjusted R^2 has increased, but that is expected since we added all variables. The residuals plots are nearly identical.
+
+## Question 4
+
+For this model, for the coefficient with the lowest (absolute) t-value, construct a 95% confidence interval for the coefficient.
+```{r}
+# The lowest is x2.
+confint(lm.full, "x2")
+```
+
+## Question 5
+
+Now, create a linear regression model without this variable with the worst fit.  How does the fit compare to the previous model?
+```{r}
+lm.fit_2 <- lm(y ~. - x2, data = df)
+summary(lm.fit_2)
+par(mfrow=c(2,2))
+plot(lm.fit_2) 
+```
+Even with the least correlated variable removed, everything still looks pretty similar.
+
+

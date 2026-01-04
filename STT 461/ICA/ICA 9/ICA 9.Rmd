@@ -1,0 +1,90 @@
+---
+title: "STT 461 ICA 9"
+author: "Derien Weatherspoon"
+date: "2023-04-01"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**For the problems below, the dataset found in OJ.csv. The target is Purchase.**
+
+```{r libraries and data}
+df <- read.csv("OJ.csv")
+library(tree)
+```
+
+## Take a look at the different fields. Are there fields which can be calculated from other fields?
+
+```{r Question 1}
+str(df)
+```
+It looks like there are some fields which can be calculated from others, like PriceDiff and ListPriceDiff.
+
+## Is StoreID a numeric field? Should it be?
+
+StoreID is a integer here, I think transforming it to a numeric would work better.
+```{r Question 2}
+StoreID_num <- as.numeric(df$StoreID)
+
+```
+
+
+## Do some exploratory data analysis to see how different fields relate to Purchase (mainly the histograms as done in the 1st video). Which fields seem relevant?
+
+```{r Question 3}
+# For the numeric variables
+
+par(mfrow=c(3,3))
+hist(df$X)
+hist(df$WeekofPurchase)
+hist(df$LoyalCH)
+hist(df$SalePriceMM)
+hist(df$SalePriceCH)
+hist(df$PriceDiff)
+hist(df$PctDiscMM)
+hist(df$PctDiscCH)
+hist(df$ListPriceDiff)
+
+# For the categorical variables
+
+par(mfrow=c(3,3))
+boxplot(df$PriceCH)
+boxplot(df$PriceMM)
+boxplot(df$DiscCH)
+boxplot(df$DiscMM)
+boxplot(df$SpecialCH)
+boxplot(df$SpecialMM)
+boxplot(df$STORE)
+boxplot(df$y)
+
+```
+
+## Create a 75/25 train/test split on the data.
+
+```{r Question 4}
+rows <- 1:nrow(df)
+train_split <- sample(rows, 0.75*length(rows))
+test_split <- rows[-train_split]
+train <- df[train_split,]
+test <- df[test_split,]
+```
+
+## Create a logistic regression model with Purchase and 2-3 of the variables as inputs. How does the confusion matrix look for the test dataset?
+
+```{r Question 5}
+#glm.fit <- glm(Purchase ~ SpecialCH + SpecialMM + DiscCH + DiscMM,  data = test, family = "binomial")
+#error?
+```
+
+## Create a decision tree model with Purchase and 2-3 of the variables as inputs. How does the confusion matrix look for the test dataset?
+
+```{r Question 6}
+#confusionMatrix(model, df$purchase)
+# can't do confusion matrix without model.
+```
+
+## Which is the better model?
+

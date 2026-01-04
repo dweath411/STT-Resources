@@ -1,0 +1,71 @@
+---
+title: "ICA 5"
+author: "Derien Weatherspoon"
+date: "2023-02-22"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libaries}
+attach(mtcars)
+library(tidyverse)
+```
+
+
+## Question 1
+Examine the qsec field in the dataset. Calculate its mean, standard deviation, and standard error.
+The following questions assume that the qsec field is normally distributed. 
+
+```{r Q1}
+mean(mtcars$qsec)
+sd(mtcars$qsec)
+
+std.error <- function(x){ sd(x)/sqrt(length(x))
+}
+std.error(mtcars$qsec)
+```
+
+## Question 2
+(a) Construct a 95% 2-sided confidence interval for the mean of the qsec field.
+(b) Then, construct a 99% 1-sided confidence interval (lower limit).
+(c) What would the result be for the 99% confidence interval if you used a normal distribution in place of
+the t-distribution?
+
+```{r Q2, warning=FALSE}
+#a
+attach(mtcars)
+qsec.model <- lm(qsec ~ 1, mtcars) # mean of qsec
+t.test(qsec)$conf.int # 95% confidence interval
+#b
+confint(qsec.model,level = 0.99) # 99% confidence interval?
+#c
+sd_q <- sd(mtcars$qsec)
+sqrt_q <- sqrt(length(mtcars$qsec))
+mean_q <- mean(mtcars$qsec)
+new_CI <- qnorm(.99)*sd_q/sqrt_q
+lower = mean_q - new_CI
+lower
+```
+
+## Question 3
+How large would the sample size have to be if a 99% 2-sided confidence interval were to be 0.2
+seconds wide (given the same standard deviation)?
+
+```{r Q3}
+
+```
+
+## Question 4
+Suppose you want to show that the mean value is different from 17 seconds, at a 95% confidence
+level. Conduct a Monte Carlo simulation to determine whether you can falsify the null hypothesis.
+What is the p-value?
+
+
+## References
+
+https://www.statology.org/standard-error-of-mean-r/
+https://bookdown.org/logan_kelly/r_practice/p09.html
+

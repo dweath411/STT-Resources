@@ -1,0 +1,286 @@
+---
+title: "STT 481 HW 4"
+author: "Derien Weatherspoon"
+date: "2023-04-03"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+
+```{r library}
+library(MASS)
+library(ISLR)
+library(gam)
+library(glmnet)
+library(boot)
+library(leaps)
+library(splines)
+```
+
+## Question 1 
+
+#### This question uses the variables dis (the weighted mean of distances to five Boston employment centers) and nox (nitrogen oxides concentration in parts per 10 million) from the Boston data (load the data from MASS package). We will treat dis as the predictor and nox as the response.
+
+a) Use the poly() function to fit a cubic polynomial regression to predict nox using dis. Plot the resulting data and polynomial fits
+
+```{r 1a}
+bos.poly <- lm(nox ~ poly(dis,3), data = Boston)
+summary(bos.poly)
+
+# using outline from Rlab
+ 
+dislims <- range(Boston$dis)
+dis.grid <- seq(from = dislims[1], to = dislims[2], by = 0.1)
+preds <- predict(bos.poly, list(dis = dis.grid))
+plot(nox ~ dis, data = Boston, col = "blue")
+lines(dis.grid, preds, col = "darkgreen", lwd = 2)
+
+
+plot(bos.poly) # residuals
+```
+
+b) Perform cross-validation to select the optimal degree for the polynomial. Plot the resulting polynomial fits with the optimal degree.
+
+```{r 1b}
+errors <- rep(0, 10)
+for (i in 1:10) {
+    bos.cv <- glm(nox ~ poly(dis, i), data = Boston)
+    errors[i] <- cv.glm(Boston, bos.cv, K = 10)$delta[1]
+}
+plot(1:10, errors, xlab = "degree", ylab = "MSE", type = "l")
+which.min(errors)
+```
+Using cross-validation, it seems like 3 is the best degree for the model.
+
+c) Use the bs() function to fit a cubic spline with six degrees of freedom to predict nox using dis. Report the knot locations. Plot the resulting fit.
+
+```{r 1c}
+dis <- Boston$dis
+nox <- Boston$nox
+bs.fit <- lm(data = Boston, nox ~ bs(dis, 6))
+summary(bs.fit)
+pred <- predict(bs.fit, newdata = list(dis = dis.grid), se = T)
+plot(dis, nox, col = "darkred")
+lines(dis.grid, pred$fit, lwd = 2)
+lines(dis.grid, pred$fit + 2*pred$se, lty = "dashed")
+lines(dis.grid, pred$fit - 2*pred$se, lty = "dashed")
+abline(v = attr(bs(dis, df = 6), "knots"), lty = 2) # knots placement
+```
+
+d) Perform cross-validation in order to select the best degrees of freedom for a cubic spline on this data. Plot the resulting cubic spline fits with the best degrees of freedom.
+
+```{r 1d, warning=FALSE}
+set.seed(1)
+errors_2 <- rep(3, 13)
+for (i in 3:13) {
+    bs.cv <- glm(nox ~ bs(dis, df = i), data = Boston)
+    errors_2[i] <- cv.glm(Boston, bs.cv, K = 10)$delta[1]
+}
+plot(3:13, errors_2[-c(1,2)], xlab = "bs degree", ylab = "MSE", type = "l")
+which.min(errors_2)
+```
+Using cross-validation, it looks like 6 is the best degree of freedom for the cubic spline model.
+
+e) Use the ns() function to fit a natural cubic spline with six degrees of freedom to predict nox using dis. Report the knot locations. Plot the resulting fit.
+
+```{r 1e}
+ns.fit <- lm(data = Boston, nox ~ ns(dis, 6))
+summary(ns.fit)
+pred <- predict(ns.fit, newdata = list(dis = dis.grid), se = T)
+plot(dis, nox, col = "darkred")
+lines(dis.grid, pred$fit, lwd = 2)
+lines(dis.grid, pred$fit + 2*pred$se, lty = "dashed")
+lines(dis.grid, pred$fit - 2*pred$se, lty = "dashed")
+abline(v = attr(ns(dis, df = 6), "knots"), lty = 2) # knots placement
+```
+
+f) Perform cross-validation in order to select the best degrees of freedom for a natural cubic spline on this data. Plot the resulting natural cubic spline fits with the best degrees of freedom.
+
+```{r 1f}
+set.seed(1)
+errors_3 <- rep(3, 13)
+for (i in 3:13) {
+    ns.cv <- glm(nox ~ ns(dis, df = i), data = Boston)
+    errors_3[i] <- cv.glm(Boston, ns.cv, K = 10)$delta[1]
+}
+plot(3:13, errors_3[-c(1,2)], xlab = "ns degree", ylab = "MSE", type = "l")
+which.min(errors_3)
+```
+Using cross-validation, it looks like the best degree of freedom is 8 for this model.
+
+## Question 2
+
+#### This question relates to the College data set.
+
+```{r 2 setup}
+data("College")
+set.seed(123)
+train <- sample(nrow(College), 600)
+College.train <- College[train,]
+College.test <- College[-train,]
+
+```
+
+a) Using out-of-state tuition as the response and the other variables as the predictors, perform forward stepwise selection on the training set in order to identify a satisfactory model that uses just a subset of the predictors.
+
+```{r 2a}
+fwd.college <- regsubsets(Outstate ~ ., data = College.train, method = 'forward', nvmax = ncol(College.train))
+fwd.summary <- summary(fwd.college)
+
+which.min(fwd.summary$bic) # lowest point on bic
+which.min(fwd.summary$cp) # lowest point on cp 
+which.min(fwd.summary$adjr2) # lowest point on adj r^2
+
+par(mfrow=c(2, 2))
+
+plot(fwd.summary$bic, type='b', xlab='# of Variables', ylab='BIC') # Plot BIC
+axis(1, at = seq(1,17,by=1))
+points(10, fwd.summary$bic[10], col = "darkgreen", cex = 2, pch = 20)
+
+plot(fwd.summary$cp, type='b', xlab='# of Variables', ylab='CP') # Plot CP
+axis(1, at = seq(1,17,by=1))
+points(12, fwd.summary$cp[12], col = "blue", cex = 2, pch = 20)
+
+plot(fwd.summary$adjr2, type='b', xlab='# of Variables', ylab='AdjR2') # Plot AdjR^2
+axis(1, at = seq(1,17,by=1))
+points(1, fwd.summary$adjr2[1], col = "red", cex = 2, pch = 20)
+
+# Find the 10 variables used for the GAM model
+
+coefs <- coef(fwd.college, id = 10)
+names(coefs)
+```
+According to BIC, the number of variables best fit for the model is 10, while for cp the number of variables is 12, and for Adjusted R^2 the number of variables is only 1. In this case, I believe I am going with BIC is the best. It is not too many variables, while at the same time not excluding too many variables. The selected predictors are: "Private", "Apps", "Accept", "Enroll", "Top10perc", "Room.Board", "PhD", "perc.alumni", "Expend", "Grad.Rate"  
+
+b) Fit a GAM on the training data, using out-of-state tuition as the response and the features selected in the previous step as the predictors.
+
+```{r 2b}
+fit.gam <- gam(Outstate ~ Private + s(Room.Board, df = 2) + s(PhD, df = 2) + s(perc.alumni, df = 2) + s(Expend, df = 5) + s(Grad.Rate, df = 2) + s(Apps, df = 2) + s(Accept, df = 2) + s(Enroll, df = 2) + s(Top10perc, df = 2), data=College.train)
+# I use s() to indicate I want a smoothing spline
+par(mfrow = c(2, 2))
+plot(fit.gam, se = T, col = "red")
+summary(fit.gam)
+fit.gam$aic
+```
+With this model, the produced aic is 10760.62. In order to lower the AIC score, I could attempt to change around the degrees of freedom for some variables. Either decreasing some, increasing some, or removing some all together. I can do this by looking at what variables are and aren't significant.
+
+c) Evaluate the model obtain on the test set, and explain the results obtained.
+
+```{r 2c}
+test.pred <- predict(fit.gam, College.test)
+errors_4 <- mean((College.test$Outstate - test.pred)^2)
+errors_4
+rsq <- 1- errors_4/mean(((College.test$Outstate - mean(College.test$Outstate)))^2)
+rsq
+```
+With 10 predictors, the rsquared for the test set is 0.8033426 using GAM. This means that roughly 80% of the variance within the data can be explained within the model of 10 predictors.
+
+## Question 3
+
+#### In this question, we wish to predict the 2019-20 salaries of five NBA players, who were free agents in 2019 summer, on the basis of various statistics associated with performance in the 2018-19 season.
+
+a) Run the following command lines to load the two data sets. Notice that here **row.names = 1** because by doing so, we can see those players' names.
+
+```{r 3a}
+train.dat <- read.csv("nbadata17.csv", row.names = 1)
+test.dat <- read.csv("nbadata18.csv", row.names = 1)
+```
+
+b) Using salary as the response and the other variables as the predicts, perform forward stepwise selection on the training set, and use BIC as the selection criterion. Report the non-zero coefficient estimates.
+
+```{r 3b}
+fwd.nba <- regsubsets(salary ~ ., data = train.dat, method = 'forward', nvmax = ncol(train.dat))
+fwd.nbasum <- summary(fwd.nba)
+plot(fwd.nbasum$bic, type='b', xlab='# of Variables', ylab='BIC') # Plot BIC
+axis(1, at = seq(1,17,by=1))
+which.min(fwd.nbasum$bic)
+coef(fwd.nba, id = 5)
+```
+I use 5 predictors in the models moving forward, according to BIC. The coefficients are: "age", "g", "gs", "x2ppercent", and "pts".
+
+c) Predict the salaries of the five players in the test.dat using the fitted model in (b)
+
+```{r 3c}
+predict.regsubsets <- function (object, newdata , id, ...){
+  form <- as.formula(object$call[[2]])  # formula of null model
+  mat <- model.matrix(form, newdata)    # building an "X" matrix from newdata
+  coefi <- coef(object, id = id)        # coefficient estimates associated with the object model containing id non-zero variables
+  xvars <- names(coefi)            # names of the non-zero coefficient estimates
+  return(mat[,xvars] %*% coefi)    # X[,non-zero variables] %*% Coefficients[non-zero variables]
+}
+fwd.pred <- predict.regsubsets(fwd.nba, newdata = test.dat, id = 5)
+fwd.pred
+```
+
+d) Fit a ridge regression model on the training set, and predict the salaries in the test set.
+
+```{r 3d}
+x.fit <- model.matrix(salary ~., data = train.dat)[,-1]
+y.fit <-  model.matrix(salary ~., data = test.dat)[,-1] # the model matrix for test to make predictions
+trs <- train.dat$salary 
+
+
+set.seed(1)
+ridge.fit <- glmnet(x.fit, trs, alpha = 0)
+names(ridge.fit)
+cv.ridge <- cv.glmnet(x.fit, trs, alpha = 0, nfolds = 10)
+bestridge_lambda <- cv.ridge$lambda.min # best tuning parameter
+bestridge_lambda
+plot(cv.ridge)
+
+# Predict
+
+ridge.pred <- predict(ridge.fit, s = bestridge_lambda, newx = y.fit)
+head(ridge.pred)
+
+# Coefficients
+
+coef(ridge.fit, s = bestridge_lambda)
+
+```
+Keep note that there are no zero coefficients in this model, this is important when comparing the predictions made by lasso.
+
+e) Fit a lasso regression model on the training set, and predict the salaries in the test set. Report the non-zero coefficient estimates.
+
+```{r 3e}
+set.seed(1)
+lasso.fit <- glmnet(x.fit, trs, alpha = 1)
+names(lasso.fit)
+cv.lasso <- cv.glmnet(x.fit, trs, alpha = 1, nfolds = 10)
+bestlasso_lambda <- cv.lasso$lambda.min # best tuning parameter
+bestlasso_lambda
+plot(cv.lasso)
+
+# Predict
+
+lasso.pred <- predict(lasso.fit, s = bestridge_lambda, newx = y.fit)
+head(lasso.pred)
+
+# Lasso coefficients
+coef(lasso.fit, s = bestlasso_lambda)
+
+```
+Lasso predictions are a lot lower than the ridge predictions. This could be because the way lasso works as a whole. Looking at the coefficients, it is obvious to tell that this is due to all the coefficients not lasso'd in. There are a lot less non-zero coefficients than in ridge.
+
+f) Fit a GAM model on the training set using the features selected in model (b) as the predictors, and plot the results and explain your findings, and then predict the salaries in the test set.
+
+```{r 3f}
+nba.gam <- gam(salary ~ age + s(g, df = 2) + s(gs, df = 2) + x2ppercent + s(pts, df = 5), data = train.dat)
+# I use s() to indicate I want a smoothing spline
+par(mfrow = c(2, 3))
+plot(nba.gam, se = T, col = "red")
+summary(nba.gam)
+nba.gam$aic
+
+test.predict <- predict(nba.gam, test.dat)
+test.predict
+```
+Using the 5 predictors selected in the earlier fitted BIC model, I have produced a model with an AIC of 6912.771, which is a pretty good number for this. The predictions look fairly accurate too, this model seems to have produced the best predictions. 
+

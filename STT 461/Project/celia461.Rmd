@@ -1,0 +1,359 @@
+---
+title: "cleanproject"
+output: html_document
+date: "2023-05-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Reading files
+```{r}
+gini <- read.csv("gini_by_country.csv")
+lat_long <- read.csv("world_country_and_usa_states_latitude_and_longitude_values.csv")
+hap15 <- read.csv('2015.csv')
+hap16 <- read.csv('2016.csv')
+hap17 <- read.csv('2017.csv')
+hap18 <- read.csv('2018.csv')
+hap19 <- read.csv('2019.csv')
+hap20 <- read.csv('2020.csv')
+hap21 <- read.csv('2021.csv')
+```
+
+Libraries
+```{r}
+library(sqldf)
+library(magrittr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(randomForest)
+library(rpart)
+library(glmnet)
+library(tidyr)
+```
+
+Checking for country name differences between gini and lat/long
+```{r}
+differences <- c()
+for (country in gini$country_name) {
+  if (country %in% lat_long$country) {
+    next
+  } else {
+    differences <- c(differences, country)
+  }
+}
+differences <- unique(differences)
+cat(differences, sep = "\n")
+```
+
+Updated lat/long data set, checking that country names are now the same (code should not output anything)
+```{r}
+new_lat_long <- read.csv("new_world_country_and_usa_states_latitude_and_longitude_values.csv")
+differences <- c()
+for (country in gini$country_name) {
+  if (country %in% new_lat_long$country) {
+    next
+  } else {
+    differences <- c(differences, country)
+  }
+}
+differences <- unique(differences)
+cat(differences, sep = "\n")
+```
+
+```{r}
+differences <- c()
+for (country in new_lat_long$country) {
+  if (country %in% gini$country_name) {
+    next
+  } else {
+    differences <- c(differences, country)
+  }
+}
+differences <- unique(differences)
+cat(differences, sep = "\n")
+```
+
+Combining happiness data sets for each year into one data set
+```{r}
+hap15$year = 2015
+hap16$year = 2016
+hap17$year = 2017
+hap18$year = 2018
+hap19$year = 2019
+hap20$year = 2020
+hap21$year = 2021
+
+colnames(hap15) <- c('country', 'region', 'rank', 'score', 'se', 'gdp', 'support', 'life_expectancy', 'freedom', 'trust', 'generosity', 'corruption', 'year')
+hap15 <- hap15[,c(1,4,6,7,8,9,10,11,13)]
+
+hap16 <- hap16[,c(1,4,7,8,9,10,11,12,14)]
+colnames(hap16) <- c('country', 'score', 'gdp', 'support', 'life_expectancy', 'freedom', 'trust', 'generosity', 'year')
+
+hap17 <- hap17[,c(1,3,6,7,8,9,10,11,13)]
+colnames(hap17) <- c('country', 'score', 'gdp', 'support', 'life_expectancy', 'freedom', 'trust', 'generosity', 'year')
+
+hap18 <- hap18[,c(2,3,4,5,6,7,8,9,10)]
+colnames(hap18) <- c('country', 'score', 'gdp', 'support', 'life_expectancy', 'freedom', 'generosity', 'trust', 'year')
+hap18 <- hap18 %>% relocate('trust', .before='generosity')
+
+hap19 <- hap19[,c(2,3,4,5,6,7,8,9,10)]
+colnames(hap19) <- c('country', 'score', 'gdp', 'support', 'life_expectancy', 'freedom', 'generosity', 'trust', 'year')
+hap19 <- hap19%>%relocate('trust', .before='generosity')
+
+hap20 <- hap20[,c(1,3,7,8,10,11,12,16,21)]
+colnames(hap20) <- c('country','score','gdp','support','freedom', 'generosity', 'trust', 'life_expectancy', 'year')
+hap20 <- hap20%>%relocate('life_expectancy', .before='freedom')
+
+hap21 <- hap21[,c(1,3,7,8,10,11,12,16,21)]
+colnames(hap21) <- c('country', 'score', 'gdp', 'support', 'freedom', 'generosity', 'trust', 'life_expectancy', 'year')
+hap21 <- hap21%>%relocate('life_expectancy', .before='freedom')
+
+hap_dat <- rbind(hap15,hap16,hap17,hap18,hap19,hap20,hap21)
+```
+
+Checking for country name differences between gini and new happiness dataset
+```{r}
+differences <- c()
+for (country in hap_dat$country) {
+  if (country %in% gini$country_name) {
+    next
+  } else {
+    differences <- c(differences, country)
+  }
+}
+differences <- unique(differences)
+cat(differences, sep = "\n")
+```
+Updating country names to match, checking for which ones have not been updated
+```{r}
+matching_names <- gini$country_name[gini$country_name %in% hap_dat$country]
+matches <- str_detect(hap_dat$country, paste(matching_names, collapse = "|"))
+hap_dat$country <- ifelse(matches, hap_dat$country, matching_names[match(hap_dat$country, matching_names)])
+differences <- hap_dat$country[!hap_dat$country %in% gini$country_name]
+cat("After updating, the following country names still don't match:\n")
+cat(differences, sep = "\n")
+```
+Removing values that still don't match
+```{r}
+remove_idx <- which(hap_dat$country %in% differences)
+hap_dat <- subset(hap_dat, !country %in% differences)
+```
+
+Checking if all country names now match
+```{r}
+differences <- hap_dat$country[!hap_dat$country %in% gini$country_name]
+cat("After updating, the following country names still don't match:\n")
+cat(differences, sep = "\n")
+```
+Creating a dataset by combining gini index, happiness dataset, and latitude/longitude data
+```{r}
+geo_gini <- sqldf('SELECT * from new_lat_long INNER JOIN gini ON new_lat_long.country = gini.country_name')
+geo_gini <- geo_gini[, c(2,3,4,5,7,8)]
+
+df <- sqldf('SELECT * from geo_gini INNER JOIN hap_dat ON geo_gini.country = hap_dat.country AND geo_gini.year = hap_dat.year ORDER BY year')
+df <- df[,c(1,2,3,4,5,6,8,9,10,11,12,13,14)]
+df
+```
+
+DATA VISUALIZATION
+
+Average life expectancy by country (2015-2021)
+(Top 10 for simplicity)
+```{r}
+avg_life_expectancy <- aggregate(life_expectancy ~ country, df, mean)
+avg_life_expectancy$life_expectancy <- avg_life_expectancy$life_expectancy * 100
+top_10_countries <- head(avg_life_expectancy[order(-avg_life_expectancy$life_expectancy),], 10)
+ggplot(top_10_countries, aes(x = life_expectancy, y = country, fill = life_expectancy)) +
+  geom_bar(stat = "identity", position = "identity") +
+  scale_fill_gradient(low = "#F0E6FF", high = "#8A2BE2", 
+                      name = "Life Expectancy\n(Years)", na.value = NA) +
+  xlab("Average Life Expectancy (Years)") + ylab("") +
+  ggtitle("Top 10 Countries by Average Life Expectancy") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_blank(),
+        plot.title = element_text(size = 16, face = "bold"),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+```
+
+Happiness in the United States over the years
+```{r}
+us_data <- filter(df, country == "United States")
+ggplot(us_data, aes(x = year, y = score)) +
+  geom_line() +
+  xlab("Year") + ylab("Score") +
+  ggtitle("Happiness score of the United States by Year") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14),
+        plot.title = element_text(size = 16, face = "bold"))
+
+```
+
+Top 10 countries with the highest happiness score pre-Covid
+```{r}
+data_2019 <- filter(df, year == 2019)
+
+mean_happiness <- data_2019 %>%
+  group_by(country) %>%
+  summarize(mean_happiness_score = mean(score)) %>%
+  arrange(desc(mean_happiness_score))
+
+top_10_happiness <- head(mean_happiness, 10)
+
+ggplot(top_10_happiness, aes(x = country, y = mean_happiness_score)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  xlab("Country") + ylab("Mean Happiness Score") +
+  ggtitle("Top 10 Countries with the Highest Mean Happiness Score in 2019") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14),
+        plot.title = element_text(size = 16, face = "bold"))
+
+```
+
+```{r}
+library(ggplot2)
+avg_support <- aggregate(support ~ country, df, mean)
+
+top_5_countries <- head(avg_support[order(-avg_support$support),], 5)
+
+top_5_data <- subset(df, country %in% top_5_countries$country)
+
+ggplot(top_5_data, aes(x = country, y = support)) +
+  geom_boxplot(fill = "pink") +
+  xlab("Country") +
+  ylab("Average Support") +
+  ggtitle("Average Support by Country, Top 5") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14),
+        plot.title = element_text(size = 16, face = "bold"))
+```
+How does the GINI inequality score affect happiness?
+```{r}
+cor(df$value, df$score)
+```
+
+```{r}
+ggplot(df, aes(x = value, y = score)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  xlab("Value") + ylab("Score") +
+  ggtitle("Correlation between GINI Value and Score")
+```
+What factors are correlated with inequality?
+```{r}
+ggplot(df, aes(x = value, y = latitude)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  xlab("Value") + ylab("Score") +
+  ggtitle("Correlation between GINI Value and Latitude")
+```
+```{r}
+ggplot(df, aes(x = value, y = longitude)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "orange") +
+  xlab("Value") + ylab("Score") +
+  ggtitle("Correlation between GINI Value and Longitude")
+```
+
+```{r}
+ggplot(df, aes(x = value, y = life_expectancy)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "green") +
+  xlab("Value") + ylab("Score") +
+  ggtitle("Correlation between GINI Value and Life Expectancy")
+```
+
+Predicting the inequality value using random forest model
+```{r}
+set.seed(123)
+train_indices <- sample(1:nrow(df), 0.8*nrow(df))
+train_data <- df[train_indices, ]
+test_data <- df[-train_indices, ]
+
+model <- randomForest(value ~ ., data = train_data)
+
+rf_predictions <- predict(model, newdata = test_data)
+
+rf_mse <- mean((rf_predictions - test_data$value)^2)
+rf_rmse <- sqrt(rf_mse)
+rf_r_squared <- cor(predictions, test_data$value)^2
+
+cat("MSE:", rf_mse, "\n")
+cat("RMSE:", rf_rmse, "\n")
+cat("R-squared:", rf_r_squared, "\n")
+```
+Predicting the inequality value using decision tree
+```{r}
+df_subset <- df[, c("value", "score", "gdp", "latitude", "longitude", "support", "life_expectancy", "freedom", "trust", "generosity")]
+
+trust_levels <- unique(df_subset$trust)
+df_subset$trust <- factor(df_subset$trust, levels = trust_levels)
+
+set.seed(123)
+train_indices <- sample(1:nrow(df_subset), 0.8*nrow(df_subset))
+train_data <- df_subset[train_indices, ]
+test_data <- df_subset[-train_indices, ]
+
+tree_model <- rpart(value ~ ., data = train_data)
+
+predictions <- predict(tree_model, newdata = test_data, drop.unused.levels = TRUE)
+
+tree_mse <- mean((predictions - test_data$value)^2)
+tree_rmse <- sqrt(tree_mse)
+tree_r_squared <- cor(predictions, test_data$value)^2
+
+cat("MSE:", tree_mse, "\n")
+cat("RMSE:", tree_rmse, "\n")
+cat("R-squared:", tree_r_squared, "\n")
+```
+Predicting the inequality value using linear regression
+```{r}
+train_data$trust <- as.numeric(as.character(train_data$trust))
+test_data$trust <- as.numeric(as.character(test_data$trust))
+
+lm_model <- lm(value ~ ., data = train_data)
+
+predictions <- predict(lm_model, newdata = test_data)
+
+lm_mse <- mean((predictions - test_data$value)^2)
+lm_rmse <- sqrt(lm_mse)
+lm_r_squared <- cor(predictions, test_data$value)^2
+
+cat("MSE:", lm_mse, "\n")
+cat("RMSE:", lm_rmse, "\n")
+cat("R-squared:", lm_r_squared, "\n")
+```
+Choosing the best model
+```{r}
+cat("Random Forest MSE:", rf_mse, "\n")
+cat("Random Forest R-squared:", rf_r_squared, "\n")
+cat("Tree MSE:", tree_mse, "\n")
+cat("Tree R-squared:", tree_r_squared, "\n")
+cat("Linear MSE:", lm_mse, "\n")
+cat("Linear R-squared:", lm_r_squared, "\n")
+```
+visualizing the random forest prediction
+```{r}
+results <- data.frame(actual = test_data$value, predicted = rf_predictions)
+
+ggplot(results, aes(x = actual, y = predicted)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+  labs(x = "Actual", y = "Predicted", title = "Random Forest Model Prediction")
+
+```
+
+
